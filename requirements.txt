@@ -1,0 +1,22 @@
+ale_py==0.10.1 # Atari Learning Environment
+gymnasium==1.0.0 # self-explanatory
+numpy==2.2.2
+pandas==2.2.3
+pytest==8.3.4 # Just necessary for testing
+scipy==1.15.1
+stable_baselines3==2.5.0 # For training
+opencv-python==4.11.0.86
+gym==0.26.2 # For legacy environments
+shimmy==2.0.0 # For legacy environments
+rich==13.9.4 # For progress bar
+tqdm==4.67.1 # For progress bar
+seaborn==0.13.2 # TODO: for visualization example
+### ENVIRONMENTS:
+# racetrackgym # TODO: Need racetrack, but pypi version has to be updated because of restricting requirements
+# pgtg==0.4.1 # TODO: Need pgtg, but pypi version has to be updated because of restricting requirements
+pgtg==0.4.0
+# -e ../pgtg
+-e .
+minigrid
+# -e ../MinigridSafe
+# astar==0.99 # Need astar for MinigridSafe

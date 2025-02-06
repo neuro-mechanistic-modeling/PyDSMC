@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "pydsmc"
+version = "0.2.1"
+description = ""
+authors = [
+  "Timo P. Gros <timopgros@cs.uni-saarland.de>",
+  "Arnd Hartmanns <a.hartmanns@utwente.nl>",
+  "Joshua Meyer <joshua.meyer@cs.uni-saarland.de>",
+  "Nicola J. Müller <nicola.mueller@dfki.de>",
+  "Ivo Hoese <ivho00001@stud.uni-saarland.de>",
+]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = ">=1.26.4,<3.0.0"
+scipy = "^1.14.1"
+gymnasium = ">=0.28.1,<2.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
