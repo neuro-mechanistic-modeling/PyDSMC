@@ -36,7 +36,7 @@ def setup_module():
             kappa=0.25,
             relative_error=False,
             bounds=(0, 1),
-            check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+            check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
             goal_reward=100
         )
 

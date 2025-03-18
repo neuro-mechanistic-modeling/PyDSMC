@@ -55,7 +55,7 @@ class StatisticalMethod:
 
     def _check_intv_2eps(self, intv: tuple[float, float]) -> float:
         if self.relative_error:
-            center = 0.5 * (intv[0] + intv[1])
+            center = 0.5 * abs(intv[0] + intv[1])
             return intv[1] - intv[0] <= 2 * self.eps * center
         else:
             return intv[1] - intv[0] <= 2 * self.eps

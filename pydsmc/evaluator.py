@@ -21,7 +21,7 @@ class Evaluator:
 
     def __init__(
         self,
-        env: GymEnv | list[gym.vector.VectorEnv], # Can be a stable_baselines3 vector env as well
+        env: GymEnv | list[gym.vector.VectorEnv],
         log_dir: Path | str | os.PathLike | bytes = 'logs',
         log_subdir: str = 'eval',
         log_level: int = logging.INFO,
@@ -117,12 +117,12 @@ class Evaluator:
             }
 
         predict_fn = self.__setup_eval(agent=agent,
-                                        predict_fn=predict_fn,
-                                        num_episodes_per_policy_run=num_episodes_per_policy_run,
-                                        save_every_n_episodes=save_every_n_episodes,
-                                        save_full_results=save_full_results,
-                                        eval_params=eval_params,
-                                        num_threads=num_threads)
+                                       predict_fn=predict_fn,
+                                       num_episodes_per_policy_run=num_episodes_per_policy_run,
+                                       save_every_n_episodes=save_every_n_episodes,
+                                       save_full_results=save_full_results,
+                                       eval_params=eval_params,
+                                       num_threads=num_threads)
 
         if time_limit is not None:
             if time_limit <= 0:
@@ -170,11 +170,11 @@ class Evaluator:
                     **predict_kwargs
                 )
 
+                time_passed = time.perf_counter() - start_time
                 if stop_on_convergence and all(prop.converged() for prop in self.properties):
                     self.logger.info(f"All properties converged!")
                     break
 
-                time_passed = time.perf_counter() - start_time
                 if (time_limit is not None) and (time_passed >= time_limit_seconds):
                     self.logger.info(f"Time limit reached!")
                     break
@@ -194,6 +194,10 @@ class Evaluator:
 
                     self.next_log_time = self.total_episodes + save_every_n_episodes
 
+        # Save resources at the end again
+        save_path = self.log_dir / Path('resources.jsonl')
+        with open(save_path, 'a') as f:
+            f.write(json.dumps({ 'total_episodes': self.total_episodes, 'time_passed': time_passed }) + '\n')
 
         hours, rem = divmod(time.perf_counter() - start_time, 3600)
         minutes, seconds = divmod(rem, 60)
@@ -291,7 +295,7 @@ class Evaluator:
                 elif 'terminal_observation' in info: # SB3 VecEnv has different key
                     info = info['terminal_observation']
 
-                trajectories[i][eps_done_per_penv[i]].append((state, action, reward, terminated, truncated, info))
+                trajectories[i][eps_done_per_penv[i]].append((state[i], action, reward, terminated, truncated, info))
 
                 if terminated or truncated:
                     eps_done_per_penv[i] += 1

@@ -111,31 +111,68 @@ The code introduced by this project is licensed under the MIT license. Please co
 
 ### Mermaid graph
 ```mermaid
-graph TD;
-  A["setting"] -->|fixed run| B["sound"]
-  A -->|sequential| C["sound"]
+%%{ init: { 'flowchart': { 'curve': 'step' } } }%%
+flowchart TD;
+  classDef sm fill:#b2ffb2,color:#000000
+  classDef dec fill:#ccccff,color:#000000
 
-  B -->|no| D["property"]
-  B -->|yes| E["property"]
+  A{"setting"} -->|fixed run| B["sound"]:::dec
+  style A fill:#ffb266,color:#000
+  A -->|sequential| C["sound"]:::dec
 
-  D -->|unbounded or bounded| F["Student’s-t intervals"]
-  D -->|binomial| G["normal intervals"]
+  B -->|no| D["property"]:::dec
+  B -->|yes| E["property"]:::dec
 
-  E -->|bounded| I["DKW"]
-  E -->|binomial| J["Wilson score w/cc"]
+  D -->|unbounded or bounded| F(["Student’s-t intervals"]):::sm
+  D -->|binomial| G(["normal intervals"]):::sm
 
-  C -->|no| K["property"]
-  C -->|yes| L["property"]
+  E -->|bounded| I(["DKW"]):::sm
+  E -->|binomial| J(["Wilson score w/cc"]):::sm
 
-  K -->|binomial| M["interval width"]
-  K -->|bounded| N["interval width"]
+  C -->|no| K["property"]:::dec
+  C -->|yes| L["property"]:::dec
 
-  M -->|absolute| J["Wilson score w/cc"]
-  M -->|relative| O["EBStop"]
+  K -->|binomial| M["interval width"]:::dec
+  K -->|bounded| N["interval width"]:::dec
 
-  N -->|absolute| Q["Hoeffding’s inequality"]
-  N -->|relative| O["EBStop"]
+  M -->|absolute| J
+  M -->|relative| O(["EBStop"]):::sm
 
-  L -->|unbounded or bounded| R["sequential Student’s-t"]
-  L -->|binomial| S["Chow-Robbins"]
+  N -->|absolute| Q(["Hoeffding’s inequality"]):::sm
+  N -->|relative| O
+  L -->|unbounded or bounded| R(["sequential Student’s-t"]):::sm
+  L -->|binomial| S(["Chow-Robbins"]):::sm
+
+  subgraph iw[" "]
+    M
+    N
+  end
+
+  subgraph prop[" "]
+    D
+    E
+    K
+    L
+  end
+
+  subgraph sound[" "]
+    B
+    C
+  end
+
+  subgraph StatMethod[" "]
+    I
+    J
+    G
+    F
+    O
+    Q
+    R
+    S
+  end
+
+  style StatMethod fill:none,stroke:none,heading:none;
+  style sound fill:none,stroke:none,heading:none;
+  style prop fill:none,stroke:none,heading:none;
+  style iw fill:none,stroke:none,heading:none;
 ```

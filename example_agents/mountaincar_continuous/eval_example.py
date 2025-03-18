@@ -12,7 +12,7 @@ from pydsmc.utils import create_eval_envs
 
 if __name__ == "__main__":
     NUM_THREADS = 1
-    NUM_PAR_ENVS = 3
+    NUM_PAR_ENVS = 256
     SEED = 42
     TRUNCATE_LIMIT = 1000
 

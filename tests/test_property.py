@@ -42,7 +42,7 @@ def test_selection_sound_unbound(setup_module, lower, upper):
                                     kappa=0.25,
                                     relative_error=True,
                                     bounds=(lower, upper),
-                                    check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                    check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                     goal_reward=100)
 
     with pytest.raises(ValueError, match=setup_module['SOUNDNESS_UNBOUND_ERROR_STR']):
@@ -76,7 +76,7 @@ def test_invalid_bounds(setup_module, lower, upper):
                                     kappa=0.25,
                                     relative_error=True,
                                     bounds=(lower, upper),
-                                    check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                    check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                     goal_reward=100)
 
     with pytest.raises(ValueError, match='Invalid bounds'):
@@ -102,7 +102,7 @@ def test_selection_fixed_relative(setup_module):
                                     kappa=0.25,
                                     relative_error=True,
                                     bounds=(0, 1),
-                                    check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                    check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                     goal_reward=100)
 
     with pytest.raises(ValueError, match=setup_module['FIXED_RELAIVE_ERROR_STR']):
@@ -136,7 +136,7 @@ def test_selection_fixed_relative(setup_module):
                                     relative_error=True,
                                     bounds=(0, 1),
                                     st_method=st_method,
-                                    check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                    check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                     goal_reward=100)
 
 

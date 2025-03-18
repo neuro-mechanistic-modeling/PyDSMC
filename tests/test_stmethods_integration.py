@@ -50,7 +50,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=False,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
     properties['binomial_rel_sound'] = prop.create_custom_property(
                                         name='goal_reaching_prob_binomial_rel_sound',
@@ -60,7 +60,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=True,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
     properties['binomial_abs_unsound'] = prop.create_custom_property(
                                         name='goal_reaching_prob_binomial_abs_unsound',
@@ -70,7 +70,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=False,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
     properties['binomial_rel_unsound'] = prop.create_custom_property(
                                         name='goal_reaching_prob_binomial_rel_unsound',
@@ -80,7 +80,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=True,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
 
     properties['bounded_abs_sound'] = prop.create_predefined_property(
@@ -139,7 +139,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=False,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
     properties['fixed_binomial_unsound'] = prop.create_custom_property(
                                         name='goal_reaching_prob_fixed_binomial_unsound',
@@ -149,7 +149,7 @@ def setup_module():
                                         kappa=0.25,
                                         relative_error=False,
                                         bounds=(0, 1),
-                                        check_fn=lambda self, t: np.sum(s[2] for s in t) >= self.goal_reward - 1e-8,
+                                        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
                                         goal_reward=100)
 
 
