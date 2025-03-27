@@ -11,6 +11,7 @@ shimmy==2.0.0 # For legacy environments
 rich==13.9.4 # For progress bar
 tqdm==4.67.1 # For progress bar
 seaborn==0.13.2 # TODO: for visualization example
+packaging==24.2 # For gymnasium<1.0.0
 ### ENVIRONMENTS:
 # racetrackgym # TODO: Need racetrack, but pypi version has to be updated because of restricting requirements
 # pgtg==0.4.1 # TODO: Need pgtg, but pypi version has to be updated because of restricting requirements

@@ -7,6 +7,7 @@ import time
 from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable
+from packaging.version import Version
 
 import gymnasium as gym
 import numpy as np
@@ -65,6 +66,7 @@ class Evaluator:
             raise ValueError("Environment must be a vectorized gymnasium or stable_baselines3 environment.")
 
         self.gym_vecenv = isinstance(self.envs[0], gym.vector.VectorEnv)
+        self.gym_version_lt_1 = Version(gym.__version__) < Version('1.0.0')
 
 
     @property
@@ -384,7 +386,11 @@ class Evaluator:
             property.save_settings(self.log_dir)
 
         if self.gym_vecenv:
-            env_seeds = [ vec_env.np_random_seed for vec_env in self.envs ]
+            if self.gym_version_lt_1:
+                self.logger.warning("No `np_random_seed` present in environment. Saved seeds will be None.")
+                env_seeds = [ [ None ] * vec_env.num_envs for vec_env in self.envs ]
+            else:
+                env_seeds = [ vec_env.np_random_seed for vec_env in self.envs ]
         else:
             env_seeds = [ [e.np_random_seed for e in vec_env.envs] for vec_env in self.envs ]
 
