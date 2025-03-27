@@ -68,6 +68,12 @@ class Evaluator:
         self.gym_vecenv = isinstance(self.envs[0], gym.vector.VectorEnv)
         self.gym_version_lt_1 = Version(gym.__version__) < Version('1.0.0')
 
+        if self.gym_vecenv and hasattr(self.envs[0], 'autoreset_mode'):
+            from gymnasium.vector.vector_env import AutoresetMode
+            for env in self.envs:
+                if env.autoreset_mode != AutoresetMode.NEXT_STEP:
+                    raise ValueError("Only the default `NextStep` autoreset mode is supported.")
+
 
     @property
     def num_envs(self) -> int:
@@ -243,6 +249,7 @@ class Evaluator:
         # Distribute episodes evenly to available parallel environments
         num_eps_per_penv = np.array([(num_episodes + i) // self.num_envs for i in range(self.num_envs)], dtype="int")
         eps_done_per_penv = np.zeros(self.num_envs, dtype="int")
+        eps_start = np.zeros(self.num_envs, dtype="bool")
 
         reset_data = env.reset()
         if self.gym_vecenv:
@@ -291,15 +298,30 @@ class Evaluator:
                 terminated = terminateds[i]
                 truncated = truncateds[i]
                 info = processed_infos[i]
+                done = terminated or truncated
 
-                if 'final_observation' in info: # Gymnasium VectorEnv's store final observation in info
-                    info = info['final_observation']
-                elif 'terminal_observation' in info: # SB3 VecEnv has different key
-                    info = info['terminal_observation']
+                if self.gym_vecenv: # Gymnasium VecEnv
+                    if self.gym_version_lt_1:   # Autoreset_Mode == SameStep
+                        if done:
+                            info = info['final_info']
+                        elif '_final_observation' in info:  # Remove data that we dont need
+                            info.pop('_final_observation')
+                            info.pop('_final_info')
+                            info.pop('final_observation')
+                            info.pop('final_info')
+                        trajectories[i][eps_done_per_penv[i]].append((state[i], action, reward, terminated, truncated, info))
 
-                trajectories[i][eps_done_per_penv[i]].append((state[i], action, reward, terminated, truncated, info))
-
-                if terminated or truncated:
+                    else:   # Autoreset_Mode == NextStep
+                        if not eps_start[i]:
+                            trajectories[i][eps_done_per_penv[i]].append((state[i], action, reward, terminated, truncated, info))
+                        eps_start[i] = done
+                    
+                else:   # SB3 VecEnv, Autoreset_Mode == SameStep
+                    if 'terminal_observation' in info:  # Remove data that we dont need
+                        info.pop('terminal_observation')
+                    trajectories[i][eps_done_per_penv[i]].append((state[i], action, reward, terminated, truncated, info))
+                
+                if done:
                     eps_done_per_penv[i] += 1
 
             state = next_states
