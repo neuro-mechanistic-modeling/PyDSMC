@@ -26,7 +26,7 @@ if __name__ == "__main__":
         env_seed=SEED,
         gym_id="HumanoidStandup-v5",
         wrappers=[Monitor],
-        vecenv_cls=gym.vector.AsyncVectorEnv, # gym.vector.SyncVectorEnv, sb3.DummyVecEnv, sb3.SubprocVecEnv
+        vecenv_cls=gym.vector.AsyncVectorEnv,  # gym.vector.SyncVectorEnv, sb3.DummyVecEnv, sb3.SubprocVecEnv
         # The following kwargs are passed to the gym.make function, which passes unknown args to the env
         max_episode_steps=TRUNCATE_LIMIT,
         # render_mode='human'
@@ -40,57 +40,72 @@ if __name__ == "__main__":
 
     # create and register a predefined property
     properties = []
-    properties.append(prop.create_predefined_property(
-        property_id='return',
-        name='returnGamma0.99',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        bounds=(None, None),
-        sound=False))  # soundness not supported since not bounded. We could compute some bounds though
-    properties.append(prop.create_predefined_property(
-        property_id='return',
-        name='returnUndiscounted',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        bounds=(None, None),
-        sound=False,  # soundness not supported since not bounded. We could compute some bounds though
-        gamma=1.0))
+    properties.append(
+        prop.create_predefined_property(
+            property_id="return",
+            name="returnGamma0.99",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(None, None),
+            sound=False,
+        ),
+    )  # soundness not supported since not bounded. We could compute some bounds though
+    properties.append(
+        prop.create_predefined_property(
+            property_id="return",
+            name="returnUndiscounted",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(None, None),
+            sound=False,  # soundness not supported since not bounded. We could compute some bounds though
+            gamma=1.0,
+        ),
+    )
 
     # define a custom property
-    properties.append(prop.create_custom_property(
-        name='impact_cost',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        check_fn=lambda self, t: (np.sum([sartti[5].get('reward_impact', 0) for sartti in t]).item()),
-    ))
-    properties.append(prop.create_custom_property(
-        name='quadctrl_cost',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        check_fn=lambda self, t: (np.sum([sartti[5].get('reward_quadctrl', 0) for sartti in t]).item()),
-    ))
+    properties.append(
+        prop.create_custom_property(
+            name="impact_cost",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            check_fn=lambda self, t: (
+                np.sum([sartti[5].get("reward_impact", 0) for sartti in t]).item()
+            ),
+        ),
+    )
+    properties.append(
+        prop.create_custom_property(
+            name="quadctrl_cost",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            check_fn=lambda self, t: (
+                np.sum([sartti[5].get("reward_quadctrl", 0) for sartti in t]).item()
+            ),
+        ),
+    )
 
     evaluator.register_properties(properties)
 
     try:
         # evaluate the agent with respect to the registered properties
-        results = evaluator.eval(agent=agent,
-                                predict_fn=agent.predict,
-                                episode_limit=None,
-                                save_every_n_episodes=1000,
-                                num_initial_episodes=1000,
-                                num_episodes_per_policy_run=1000,
-                                save_full_results=False,
-                                stop_on_convergence=True,
-                                num_threads=NUM_THREADS,
-                                # Using non-deterministic policy might require setting a numpy seed for reproducibility
-                                # (this is for example the case with stable_baselines3 DQN) `np.random.seed(42)`
-                                deterministic=True
-                            )
+        results = evaluator.eval(
+            agent=agent,
+            predict_fn=agent.predict,
+            episode_limit=None,
+            save_every_n_episodes=1000,
+            num_initial_episodes=1000,
+            num_episodes_per_policy_run=1000,
+            save_full_results=False,
+            stop_on_convergence=True,
+            num_threads=NUM_THREADS,
+            # Using non-deterministic policy might require setting a numpy seed for reproducibility
+            # (this is for example the case with stable_baselines3 DQN) `np.random.seed(42)`
+            deterministic=True,
+        )
 
     finally:
         for env in envs:

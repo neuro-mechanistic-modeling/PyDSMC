@@ -1,7 +1,6 @@
 #!python3
 
 
-import ale_py
 import gymnasium as gym
 from gymnasium.wrappers import FrameStackObservation
 from stable_baselines3 import PPO
@@ -12,9 +11,8 @@ import pydsmc.property as prop
 from pydsmc.evaluator import Evaluator
 from pydsmc.utils import create_eval_envs
 
-
 if __name__ == "__main__":
-    NUM_THREADS = 1 #! BREAKS FOR HIGHER VALUE's. I guess the emulator has some kind of global state?
+    NUM_THREADS = 1  #! BREAKS FOR HIGHER VALUE's. Emulator has some kind of global state?
     NUM_PAR_ENVS = 50
     SEED = 42
 
@@ -42,8 +40,13 @@ if __name__ == "__main__":
         num_envs_per_thread=NUM_PAR_ENVS,
         env_seed=SEED,
         gym_id="BreakoutNoFrameskip-v4",
-        wrappers=[lambda e: AtariWrapper(e, frame_skip=1, terminal_on_life_loss=True), lambda e: FrameStackObservation(e, stack_size=4), RemoveLastDimensionWrapper, Monitor],
-        vecenv_cls=gym.vector.AsyncVectorEnv, # gym.vector.SyncVectorEnv, sb3.DummyVecEnv, sb3.SubprocVecEnv
+        wrappers=[
+            lambda e: AtariWrapper(e, frame_skip=1, terminal_on_life_loss=True),
+            lambda e: FrameStackObservation(e, stack_size=4),
+            RemoveLastDimensionWrapper,
+            Monitor,
+        ],
+        vecenv_cls=gym.vector.AsyncVectorEnv,  # gym.vector.SyncVectorEnv, sb3.DummyVecEnv, sb3.SubprocVecEnv
         # The following kwargs are passed to the gym.make function, which passes unknown args to the env
         # max_episode_steps=TRUNCATE_LIMIT
         # render_mode='human'
@@ -57,60 +60,72 @@ if __name__ == "__main__":
 
     # create and register a predefined property
     properties = []
-    properties.append(prop.create_predefined_property(
-        property_id='return',
-        name='returnGamma0.99',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        bounds=(0, 864),
-        sound=True
-    ))
-    properties.append(prop.create_predefined_property(
-        property_id='return',
-        name='returnUndiscounted',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        bounds=(0, 864),
-        sound=True,
-        gamma=1.0
-    ))
-    properties.append(prop.create_predefined_property(
-        property_id='episode_length',
-        eps=0.025,
-        kappa=0.05,
-        relative_error=True,
-        bounds=(0, None)
-    ))
+    properties.append(
+        prop.create_predefined_property(
+            property_id="return",
+            name="returnGamma0.99",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(0, 864),
+            sound=True,
+        ),
+    )
+    properties.append(
+        prop.create_predefined_property(
+            property_id="return",
+            name="returnUndiscounted",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(0, 864),
+            sound=True,
+            gamma=1.0,
+        ),
+    )
+    properties.append(
+        prop.create_predefined_property(
+            property_id="episode_length",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(0, None),
+        ),
+    )
     # define a custom property
-    properties.append(prop.create_custom_property(
-                                        name='first_life_lost',
-                                        eps=0.025,
-                                        kappa=0.05,
-                                        relative_error=True,
-                                        bounds=(0, None),
-                                        check_fn=lambda self, t: next((i for i, x in enumerate(t) if 'lives' in x[5] and x[5]['lives'] < 5), len(t))))
-
+    properties.append(
+        prop.create_custom_property(
+            name="first_life_lost",
+            epsilon=0.025,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(0, None),
+            check_fn=lambda self, t: next(
+                (i for i, x in enumerate(t) if "lives" in x[5] and x[5]["lives"] < 5),
+                len(t),
+            ),
+        ),
+    )
 
     evaluator.register_properties(property)
 
     try:
         # evaluate the agent with respect to the registered properties
-        results = evaluator.eval(agent=agent,
-                                predict_fn=agent.predict,
-                                episode_limit=None,
-                                save_every_n_episodes=100,
-                                num_initial_episodes=100,
-                                num_episodes_per_policy_run=100,
-                                save_full_results=False,
-                                seed=45,
-                                stop_on_convergence=True,
-                                num_threads=NUM_THREADS,
-                                # Using non-deterministic policy might require setting a numpy seed for reproducibility
-                                # (this is for example the case with stable_baselines3 DQN) `np.random.seed(42)`
-                                deterministic=True
-                            )
+        results = evaluator.eval(
+            agent=agent,
+            predict_fn=agent.predict,
+            episode_limit=None,
+            save_every_n_episodes=100,
+            num_initial_episodes=100,
+            num_episodes_per_policy_run=100,
+            save_full_results=False,
+            seed=45,
+            stop_on_convergence=True,
+            num_threads=NUM_THREADS,
+            # Using non-deterministic policy might require setting a numpy seed for reproducibility
+            # (this is for example the case with stable_baselines3 DQN) `np.random.seed(42)`
+            deterministic=True,
+        )
 
     finally:
         for env in envs:

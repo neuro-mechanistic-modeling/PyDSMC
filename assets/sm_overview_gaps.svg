@@ -194,7 +194,7 @@
     </g>
     <g>
       <ellipse class="cls-2" cx="151.73" cy="132.16" rx="18.46" ry="9.4"/>
-      <text class="cls-6" transform="translate(144.21 130.33)"><tspan x="0" y="0">Wilson</tspan><tspan x="-3.93" y="5.6">score w/cc</tspan></text>
+      <text class="cls-6" transform="translate(142.36 130.33)"><tspan x="0" y="0">Clopper-</tspan><tspan x=".78" y="5.6">Pearson</tspan></text>
     </g>
     <g>
       <ellipse class="cls-2" cx="196.02" cy="132.16" rx="18.46" ry="9.23"/>

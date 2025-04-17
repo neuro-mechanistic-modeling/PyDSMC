@@ -1,11 +1,11 @@
 #!python3
 
-import pgtg
-from stable_baselines3 import DQN
 import gymnasium as gym
+import pgtg
 from gymnasium.wrappers import FlattenObservation, TimeLimit
+from stable_baselines3 import DQN
 
-env = gym.make('pgtg-v3', final_goal_bonus=150)
+env = gym.make("pgtg-v3", final_goal_bonus=150)
 env = TimeLimit(env, max_episode_steps=100)
 env = FlattenObservation(env)
 

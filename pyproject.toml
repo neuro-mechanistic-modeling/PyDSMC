@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydsmc"
-version = "0.2.3"
+version = "0.2.4"
 description = ""
 authors = [
   "Timo P. Gros <timopgros@cs.uni-saarland.de>",
@@ -16,7 +16,7 @@ python = "^3.10"
 numpy = ">=1.26.4,<3.0.0"
 scipy = "^1.14.1"
 gymnasium = ">=0.28.1,<2.0.0"
-
+packaging = ">=20.0"
 
 [build-system]
 requires = ["poetry-core"]
