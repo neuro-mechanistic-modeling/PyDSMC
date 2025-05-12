@@ -1,5 +1,7 @@
 #!python3
 
+import pathlib
+import sys
 
 import gymnasium as gym
 import numpy as np
@@ -12,6 +14,8 @@ from pydsmc.evaluator import Evaluator
 from pydsmc.utils import create_eval_envs
 
 if __name__ == "__main__":
+    script_path = pathlib.Path(__file__).parent.resolve()
+
     NUM_THREADS = 1
     NUM_PAR_ENVS = 100
     SEED = 42
@@ -38,10 +42,10 @@ if __name__ == "__main__":
     )
 
     # create the agent
-    agent = PPO.load("ppo_agent.zip", device="cpu")
+    agent = PPO.load(script_path / "ppo_agent.zip", device="cpu")
 
     # initialize the evaluator
-    evaluator = Evaluator(env=envs, log_dir="./logs")
+    evaluator = Evaluator(env=envs, log_dir=sys.argv[1] or script_path / "logs")
 
     # create and register a predefined property
     properties = []

@@ -424,7 +424,7 @@ class Evaluator:
     def __save_eval_params(self, eval_settings: dict):
         save_path = self.log_dir / "settings.json"
         with save_path.open("w") as f:
-            json.dump(eval_settings, f, indent=4)
+            json.dump(eval_settings, f, indent=4, cls=NumpyEncoder)
         self.logger.info(f"Evaluation settings saved to {save_path}")
 
     def __setup_eval(

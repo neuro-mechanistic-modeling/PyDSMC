@@ -17,11 +17,15 @@ def __read_run_results(
     log_dir: str | os.PathLike | bytes,
     *,
     include_timeseries: bool = False,
+    first_converged_row: bool = False,
     only_latest: bool = True,
 ):
     settings_path = Path(log_dir) / "settings.json"
     with settings_path.open("r") as f:
         eval_settings = json.load(f)
+
+    with settings_path.open() as f_setting:
+        set_data = json.load(f_setting)
 
     prop_ids = eval_settings["property_ids"]
 
@@ -34,20 +38,40 @@ def __read_run_results(
             continue
 
         results_path = entry / "results.jsonl"
+        prop_settings_path = entry / "settings.json"
 
-        with settings_path.open() as f_setting:
-            set_data = json.load(f_setting)
+        with prop_settings_path.open() as f_psetting:
+            pset_data = json.load(f_psetting)
 
         with results_path.open() as f_results:
             if include_timeseries:
                 for line in f_results:
                     res_data = json.loads(line)
-                    last_results.append(res_data | set_data)
+                    last_results.append(res_data | set_data | pset_data)
+
+            elif first_converged_row:
+                conv = False
+                for line in f_results:
+                    res_data = json.loads(line)
+                    if res_data["intv_converged"]:
+                        last_results.append(res_data | set_data | pset_data)
+                        conv = True
+                        break
+                if not conv:
+                    last_results.append(res_data | set_data | pset_data)
+
             else:
+                conv = -1
                 lines = f_results.readlines()
-                if lines:
-                    res_data = json.loads(lines[-1])
-                    last_results.append(res_data | set_data)
+                for line in lines:
+                    res_data = json.loads(line)
+                    if res_data["intv_converged"]:
+                        conv = res_data["total_episodes"]
+                        break
+                res_data = json.loads(lines[-1])
+                res_data["converged@"] = conv
+                last_results.append(res_data | set_data | pset_data)
+
     return last_results
 
 
@@ -56,12 +80,14 @@ def jsons_to_df(
     save_path: str | os.PathLike | bytes | None = None,
     *,
     include_timeseries: bool = False,
+    first_converged_row: bool = False,
     save: bool = True,
     only_latest: bool = True,
 ):
     latest_results = __read_run_results(
         log_dir,
         include_timeseries=include_timeseries,
+        first_converged_row=first_converged_row,
         only_latest=only_latest,
     )
     df = pd.DataFrame(latest_results)

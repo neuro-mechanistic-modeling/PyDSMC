@@ -33,7 +33,7 @@ __PRE_DEFINED_PROPERTIES = {
     },
     # Records how often the goal was reached. Goal reached here means that the last reward is at least the goal reward
     # Alas, no general easy way to verify whether a 'goal' was reached via the gymnasium interface
-    "goal_reaching_prob": {
+    "goal_reaching_probability": {
         "check_fn": lambda self, t: t[-1][2] >= self.goal_reward,
         "bounds": (0.0, 1.0),
         "binomial": True,
@@ -53,6 +53,10 @@ __PRE_DEFINED_PROPERTIES = {
         "binomial": True,
     },
 }
+# TODO: Legacy, remove ig.
+__PRE_DEFINED_PROPERTIES["goal_reaching_prob"] = __PRE_DEFINED_PROPERTIES[
+    "goal_reaching_probability"
+]
 
 
 # base class for evaluation properties

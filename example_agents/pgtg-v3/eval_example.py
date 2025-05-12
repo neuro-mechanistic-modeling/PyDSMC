@@ -1,15 +1,20 @@
 #!python3
 
+import pathlib
+import sys
 
 import gymnasium as gym
 from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
 
+import pgtg
 import pydsmc.property as prop
 from pydsmc.evaluator import Evaluator
 from pydsmc.utils import create_eval_envs
 
 if __name__ == "__main__":
+    script_path = pathlib.Path(__file__).parent.resolve()
+
     NUM_THREADS = 2
     NUM_PAR_ENVS = 125
     SEED = 42
@@ -33,10 +38,10 @@ if __name__ == "__main__":
     )
 
     # create the agent
-    agent = DQN.load("dqn_agent")
+    agent = DQN.load(script_path / "dqn_agent")
 
     # initialize the evaluator
-    evaluator = Evaluator(env=envs, log_dir="./logs")
+    evaluator = Evaluator(env=envs, log_dir=sys.argv[1] or script_path / "logs")
 
     # create and register a predefined property
     properties = []

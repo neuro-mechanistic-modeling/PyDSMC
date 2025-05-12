@@ -2,6 +2,7 @@
 
 # Parameters taken from https://huggingface.co/sb3/sac-MountainCarContinuous-v0
 
+import pathlib
 from collections import OrderedDict
 
 from stable_baselines3 import SAC
@@ -11,6 +12,8 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from pydsmc.utils import create_eval_envs
 
 if __name__ == "__main__":
+    script_path = pathlib.Path(__file__).parent.resolve()
+
     # Train and save the model
     envs = create_eval_envs(
         num_threads=1,
@@ -40,7 +43,6 @@ if __name__ == "__main__":
         ],
     )
     model = SAC(verbose=1, **params)
-
     model.learn(total_timesteps=100000, progress_bar=True, log_interval=20)
 
-    model.save("mountaincar")
+    model.save(script_path / "sac_agent")

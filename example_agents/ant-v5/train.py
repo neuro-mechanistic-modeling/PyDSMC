@@ -1,1 +1,1 @@
-# trained with parameters taken from https://huggingface.co/sb3/ppo-Ant-v3
+# Evaluated the agent from https://huggingface.co/sb3/ppo-Ant-v3

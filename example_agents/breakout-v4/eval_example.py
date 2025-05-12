@@ -1,6 +1,9 @@
 #!python3
 
+import pathlib
+import sys
 
+import ale_py
 import gymnasium as gym
 from gymnasium.wrappers import FrameStackObservation
 from stable_baselines3 import PPO
@@ -12,8 +15,10 @@ from pydsmc.evaluator import Evaluator
 from pydsmc.utils import create_eval_envs
 
 if __name__ == "__main__":
+    script_path = pathlib.Path(__file__).parent.resolve()
+
     NUM_THREADS = 1  #! BREAKS FOR HIGHER VALUE's. Emulator has some kind of global state?
-    NUM_PAR_ENVS = 50
+    NUM_PAR_ENVS = 1
     SEED = 42
 
     # Necessary because of legacy reasons I suppose
@@ -41,7 +46,7 @@ if __name__ == "__main__":
         env_seed=SEED,
         gym_id="BreakoutNoFrameskip-v4",
         wrappers=[
-            lambda e: AtariWrapper(e, frame_skip=1, terminal_on_life_loss=True),
+            lambda e: AtariWrapper(e, frame_skip=1, terminal_on_life_loss=False),
             lambda e: FrameStackObservation(e, stack_size=4),
             RemoveLastDimensionWrapper,
             Monitor,
@@ -53,10 +58,10 @@ if __name__ == "__main__":
     )
 
     # create the agent
-    agent = PPO.load("ppo_agent")
+    agent = PPO.load(script_path / "ppo_agent")
 
     # initialize the evaluator
-    evaluator = Evaluator(env=envs, log_dir="./logs")
+    evaluator = Evaluator(env=envs, log_dir=sys.argv[1] or script_path / "logs")
 
     # create and register a predefined property
     properties = []
@@ -107,7 +112,7 @@ if __name__ == "__main__":
         ),
     )
 
-    evaluator.register_properties(property)
+    evaluator.register_properties(properties)
 
     try:
         # evaluate the agent with respect to the registered properties
@@ -119,7 +124,6 @@ if __name__ == "__main__":
             num_initial_episodes=100,
             num_episodes_per_policy_run=100,
             save_full_results=False,
-            seed=45,
             stop_on_convergence=True,
             num_threads=NUM_THREADS,
             # Using non-deterministic policy might require setting a numpy seed for reproducibility

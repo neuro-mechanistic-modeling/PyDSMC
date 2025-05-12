@@ -1,5 +1,5 @@
 # pydsmc/__init__.py
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 from pydsmc.evaluator import Evaluator
 from pydsmc.json_translator import jsons_to_df

@@ -170,8 +170,8 @@
     <text class="cls-6" transform="translate(218.03 101.06)"><tspan x="0" y="0">absolute</tspan></text>
     <text class="cls-6" transform="translate(59.96 37.07)"><tspan x="0" y="0">no</tspan></text>
     <text class="cls-6" transform="translate(104.67 36.87)"><tspan class="cls-7" x="0" y="0">yes</tspan></text>
-    <text class="cls-6" transform="translate(225.96 37.07)"><tspan x="0" y="0">no</tspan></text>
-    <text class="cls-6" transform="translate(270.67 36.87)"><tspan class="cls-7" x="0" y="0">yes</tspan></text>
+    <text class="cls-6" transform="translate(224.96 37.07)"><tspan x="0" y="0">yes</tspan></text>
+    <text class="cls-6" transform="translate(271.67 36.87)"><tspan class="cls-7" x="0" y="0">no</tspan></text>
     <text class="cls-6" transform="translate(119.86 13.66)"><tspan x="0" y="0">fixed run</tspan></text>
     <text class="cls-5" transform="translate(197.29 13.66)"><tspan x="0" y="0">sequential</tspan></text>
   </g>
