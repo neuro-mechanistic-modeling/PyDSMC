@@ -2,6 +2,7 @@ import shutil
 
 import gymnasium as gym
 import numpy as np
+import pgtg
 import pytest
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import DummyVecEnv

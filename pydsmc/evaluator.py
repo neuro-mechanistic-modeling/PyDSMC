@@ -19,25 +19,28 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Iterable
 
+    from stable_baselines3.common.vec_env import VecEnv as SB3VecEnv
+
     from pydsmc.property import Property
 
 
 # Main evaluator class
 class Evaluator:
+    envs: list[Any]
+
     def __init__(
         self,
-        env: GymEnv | list[gym.vector.VectorEnv],
-        log_dir: Path | str | os.PathLike | bytes = "logs",
+        env: list[gym.vector.VectorEnv] | list[SB3VecEnv] | list[GymEnv] | GymEnv,
+        log_dir: Path | str | os.PathLike[str] = "logs",
         log_subdir: str = "eval",
         log_level: int = logging.INFO,
         *,
         colorize_logs: bool = False,
     ) -> None:
-        self.envs = env
         self.log_base = Path(log_dir)
         self.log_base.mkdir(exist_ok=True, parents=True)
         self.log_subdir = log_subdir
-        self.properties = []
+        self.properties: list[Property] = []
         self.total_episodes = 0
         self.next_log_time = 0
 
@@ -61,6 +64,8 @@ class Evaluator:
             self.envs = [
                 gym.vector.AsyncVectorEnv([lambda e=e: e]) for e in env
             ]  # List but not vectorized
+        else:
+            self.envs = env
 
         # earlier versions used n_envs. So we'd enforce a more recent version here otherwise
         # Support _some_ backwards compatibility at least
@@ -94,6 +99,20 @@ class Evaluator:
         for prop in properties:
             self.register_property(prop)
 
+    def __check_fallback(self, stop_on_convergence) -> None:
+        if stop_on_convergence:
+            for p in self.properties:
+                if not p.converged():
+                    prev_st_method = p.fallback_st_method()
+                    p.save_settings(
+                        self.log_dir,
+                        additional_entries={"original_st_method": prev_st_method},
+                    )
+                    self.logger.warning(
+                        f"Property {p.name} did not converge within the resource limit. "
+                        f"Falling back to {p.st_method.__class__.__name__} from {prev_st_method} ",
+                    )
+
     def eval(
         self,
         agent: Any = None,  # Allow None, since agent is _ONLY_ necessary if predict_fn is None
@@ -107,18 +126,22 @@ class Evaluator:
         stop_on_convergence: bool = True,
         save_full_results: bool = False,
         save_full_trajectory: bool = False,
-        num_threads: int = 1,
+        num_threads: int | None = None,
         extra_log_info: Any = None,
         **predict_kwargs,
     ) -> list[Property]:
         if num_initial_episodes < 1 or num_episodes_per_policy_run < 1:
             raise ValueError("Number of initial episodes, and per policy run, must be at least 1")
+        if num_threads is None:
+            num_threads = len(self.envs)
         if num_threads < 1:
             raise ValueError("Number of threads must be at least 1")
         if (
             episode_limit is None
             and time_limit is None
-            and not (stop_on_convergence and all(prop.epsilon is not None for prop in self.properties))
+            and not (
+                stop_on_convergence and all(prop.epsilon is not None for prop in self.properties)
+            )
         ):
             raise ValueError(
                 "At least one stopping criterion must be set: episode_limit, time_limit, or stop_on_convergence. "
@@ -187,7 +210,9 @@ class Evaluator:
                 if property_.epsilon is None:
                     property_string += f" in the fixed run setting with min_samples={property_.st_method.min_samples}"
                 else:
-                    property_string += f" in the sequential setting with epsilon ={property_.epsilon }"
+                    property_string += (
+                        f" in the sequential setting with epsilon ={property_.epsilon}"
+                    )
                 self.logger.info(property_string)
 
             while True:
@@ -211,10 +236,12 @@ class Evaluator:
 
                 if (time_limit is not None) and (time_passed >= time_limit_seconds):
                     self.logger.info("Time limit reached!")
+                    self.__check_fallback(stop_on_convergence)
                     break
 
                 if (episode_limit is not None) and (self.total_episodes >= episode_limit):
                     self.logger.info("Episode limit reached!")
+                    self.__check_fallback(stop_on_convergence)
                     break
 
                 if save_every_n_episodes and self.total_episodes >= self.next_log_time:
@@ -259,11 +286,11 @@ class Evaluator:
     def clear_properties(self) -> None:
         self.properties = []
 
-    def set_log_dir(self, log_dir: Path | str | os.PathLike | bytes = "logs") -> None:
+    def set_log_dir(self, log_dir: Path | str | os.PathLike = "logs") -> None:
         self.log_base = Path(log_dir)
         self.log_base.mkdir(exist_ok=True, parents=True)
 
-    def __get_thread_env(self) -> bool:
+    def __get_thread_env(self) -> gym.vector.VectorEnv | SB3VecEnv:
         try:
             return self.thread_local.env
         except AttributeError:
@@ -297,11 +324,13 @@ class Evaluator:
             state = reset_data
             info = env.reset_infos
 
-        trajectories = [[[] for _ in range(num_episodes)] for num_episodes in num_episodes_per_venv]
+        trajectories: list[list[list[tuple[Any, Any, Any, bool, bool, dict]]]] = [
+            [[] for _ in range(num_episodes)] for num_episodes in num_episodes_per_venv
+        ]
         while (episodes_done_per_venv < num_episodes_per_venv).any():
             actions, states = predict_fn(state, **predict_kwargs)
             step_data = env.step(actions)
-            processed_infos = [{} for _ in range(self.num_envs)]
+            processed_infos: list[dict] = [{} for _ in range(self.num_envs)]
 
             if self.gym_vecenv:
                 next_states, rewards, terminateds, truncateds, infos = step_data
@@ -372,20 +401,20 @@ class Evaluator:
 
             state = next_states
 
-        trajectories = [t for trajectory in trajectories for t in trajectory]
+        flat_trajectories = [t for trajectory in trajectories for t in trajectory]
 
-        assert len(trajectories) == num_episodes, (
-            f"Expected {num_episodes} trajectories, got {len(trajectories)}"
+        assert len(flat_trajectories) == num_episodes, (
+            f"Expected {num_episodes} trajectories, got {len(flat_trajectories)}"
         )
 
-        for trajectory in trajectories:
+        for trajectory in flat_trajectories:
             for property_ in self.properties:
                 prop_check = property_.check(trajectory)
                 property_.add_sample(prop_check)
 
         if save_full_trajectory:
             with (self.log_dir / "trajectories.jsonl").open("a") as f:
-                for trajectory in trajectories:
+                for trajectory in flat_trajectories:
                     f.write(json.dumps(trajectory, cls=NumpyEncoder) + "\n")
 
         self.total_episodes += int(num_episodes)
@@ -399,7 +428,7 @@ class Evaluator:
         *,
         save_full_trajectory: bool = False,
         **predict_kwargs,
-    ):
+    ) -> None:
         # Distribute episodes evenly to available threads
         num_episodes_per_thread = np.array(
             [(num_episodes + i) // num_threads for i in range(num_threads)],
@@ -421,7 +450,7 @@ class Evaluator:
         for future in as_completed(futures):
             _result = future.result()  # Wait for completion
 
-    def __save_eval_params(self, eval_settings: dict):
+    def __save_eval_params(self, eval_settings: dict) -> None:
         save_path = self.log_dir / "settings.json"
         with save_path.open("w") as f:
             json.dump(eval_settings, f, indent=4, cls=NumpyEncoder)
@@ -438,7 +467,7 @@ class Evaluator:
         *,
         extra_log_info: Any = None,
         save_full_results: bool,
-    ):
+    ) -> Callable:
         if len(self.envs) < num_threads:
             raise ValueError(
                 f"Number of environments must be at least the same as number of threads. Envs: {len(self.envs)}, threads: {num_threads}. "

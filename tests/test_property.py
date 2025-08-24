@@ -131,33 +131,34 @@ def test_selection_fixed_relative(setup_module):
         )
 
     # Exception thrown outside of statistical selection, since a valid statistical method is passed
-    st_method = prop.select_statistical_method(relative_error=True, epsilon=0.2)
-    with pytest.raises(ValueError, match=setup_module["FIXED_RELAIVE_ERROR_STR"]):
-        prop.create_predefined_property(
-            property_id="return",
-            name="return_bounded_abs_unsound",
-            sound=True,
-            epsilon=None,
-            kappa=0.25,
-            relative_error=True,
-            st_method=st_method,
-            bounds=(-100, 100),
-        )
-
-    with pytest.raises(ValueError, match=setup_module["FIXED_RELAIVE_ERROR_STR"]):
-        prop.create_custom_property(
-            name="goal_reaching_prob_binomial_rel_sound",
-            binomial=True,
-            sound=True,
-            epsilon=None,
-            kappa=0.25,
-            relative_error=True,
-            bounds=(0, 1),
-            st_method=st_method,
-            check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
-            >= self.goal_reward - 1e-8,
-            goal_reward=100,
-        )
+    ### When passing a statistical method, the parameters are not checked since they are not used.
+    # st_method = prop.select_statistical_method(relative_error=True, epsilon=0.2)
+    # with pytest.raises(ValueError, match=setup_module["FIXED_RELAIVE_ERROR_STR"]):
+    #     prop.create_predefined_property(
+    #         property_id="return",
+    #         name="return_bounded_abs_unsound",
+    #         sound=True,
+    #         epsilon=None,
+    #         kappa=0.25,
+    #         relative_error=True,
+    #         st_method=st_method,
+    #         bounds=(-100, 100),
+    #     )
+    #
+    # with pytest.raises(ValueError, match=setup_module["FIXED_RELAIVE_ERROR_STR"]):
+    #     prop.create_custom_property(
+    #         name="goal_reaching_prob_binomial_rel_sound",
+    #         binomial=True,
+    #         sound=True,
+    #         epsilon=None,
+    #         kappa=0.25,
+    #         relative_error=True,
+    #         bounds=(0, 1),
+    #         st_method=st_method,
+    #         check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
+    #         >= self.goal_reward - 1e-8,
+    #         goal_reward=100,
+    #     )
 
 
 def test_selection_predefined_unknown(setup_module):

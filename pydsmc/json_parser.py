@@ -14,12 +14,12 @@ if TYPE_CHECKING:
 
 
 def __read_run_results(
-    log_dir: str | os.PathLike | bytes,
+    log_dir: Path | str | os.PathLike,
     *,
     include_timeseries: bool = False,
     first_converged_row: bool = False,
     only_latest: bool = True,
-):
+) -> list[dict]:
     settings_path = Path(log_dir) / "settings.json"
     with settings_path.open("r") as f:
         eval_settings = json.load(f)
@@ -76,14 +76,14 @@ def __read_run_results(
 
 
 def jsons_to_df(
-    log_dir: str | os.PathLike | bytes,
-    save_path: str | os.PathLike | bytes | None = None,
+    log_dir: Path | str | os.PathLike,
+    save_path: Path | str | os.PathLike | None = None,
     *,
     include_timeseries: bool = False,
     first_converged_row: bool = False,
     save: bool = True,
     only_latest: bool = True,
-):
+) -> pd.DataFrame:
     latest_results = __read_run_results(
         log_dir,
         include_timeseries=include_timeseries,

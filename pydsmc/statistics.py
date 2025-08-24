@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import abc
 import bisect
+from abc import ABC, abstractmethod
 
 import numpy as np
-import numpy.typing
 from scipy.stats import beta, norm, t
 
-from pydsmc.utils import DSMCLogger, is_bounded
+from pydsmc.utils import DSMCLogger, is_bounded, is_valid_bounds
 
 # Default methods:
 # sequential
@@ -29,23 +28,28 @@ from pydsmc.utils import DSMCLogger, is_bounded
 # + unbounded or unsound: StudentsTMethod
 
 
-class StatisticalMethod:
+class StatisticalMethod(ABC):
     def __init__(
         self,
         name: str,
         epsilon: float | None = 0.1,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float, float] = (None, None),
+        bounds: tuple[float | None, float | None] = (None, None),
         binomial: bool = False,
         min_samples: int = 2,
     ):
+        if not is_valid_bounds(bounds):
+            raise ValueError(f"Invalid bounds: {bounds}")
+        if epsilon is None and relative_error:
+            raise ValueError("Relative error requires epsilon to be set")
+
         self.name = name
         self.epsilon = epsilon
         self.kappa = kappa
         self.relative_error = relative_error
-        self.a = 0.0 if binomial else -numpy.inf if bounds[0] is None else bounds[0]
-        self.b = 1.0 if binomial else numpy.inf if bounds[1] is None else bounds[1]
+        self.a = 0.0 if binomial else -np.inf if bounds[0] is None else bounds[0]
+        self.b = 1.0 if binomial else np.inf if bounds[1] is None else bounds[1]
         self.binomial = binomial
         self.min_samples = min_samples
 
@@ -55,14 +59,15 @@ class StatisticalMethod:
         self.variance = 0.0
         self.stddev = 0.0
 
-    def _check_intv_2epsilon(self, intv: tuple[float, float]) -> float:
+    def _check_intv_2epsilon(self, intv: tuple[float, float]) -> bool:
+        assert self.epsilon is not None
         if self.relative_error:
             center = 0.5 * abs(intv[0] + intv[1])
             return intv[1] - intv[0] <= 2 * self.epsilon * center
         return intv[1] - intv[0] <= 2 * self.epsilon
 
-    def add_sample(self, x: float):
-        assert not numpy.isinf(x) and self.a <= x <= self.b, (
+    def add_sample(self, x: float) -> None:
+        assert not np.isinf(x) and self.a <= x <= self.b, (
             f"Sample {x} out of bounds [{self.a}, {self.b}]"
         )
         assert not self.binomial or x in {0.0, 1.0}
@@ -74,11 +79,15 @@ class StatisticalMethod:
         delta2 = x - self.mean
         self._m2 += delta * delta2
         self.variance = self._m2 / self.count
-        self.stddev = numpy.sqrt(self.variance)
+        self.stddev = np.sqrt(self.variance)
 
-    @abc.abstractmethod
+    @abstractmethod
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
         return False, None
+
+    @abstractmethod
+    def is_sound(self) -> bool:
+        raise NotImplementedError("A statistical method must specify whether it is sound.")
 
 
 # The Clopper-Pearson interval
@@ -101,7 +110,7 @@ class ClopperPearsonIntervalMethod(StatisticalMethod):
         epsilon: float | None = None,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 2,
     ):
@@ -169,6 +178,9 @@ class ClopperPearsonIntervalMethod(StatisticalMethod):
         # Return interval
         return self._get_interval(self.mean, self.count)
 
+    def is_sound(self) -> bool:
+        return True
+
 
 # The Wilson score interval with continuity correction
 #
@@ -190,7 +202,7 @@ class WilsonScoreIntervalMethod(StatisticalMethod):
         epsilon: float | None = None,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 2,
     ):
@@ -253,7 +265,7 @@ class WilsonScoreIntervalMethod(StatisticalMethod):
                     + self.z_squared
                     - (
                         self.z
-                        * numpy.sqrt(
+                        * np.sqrt(
                             self.z_squared
                             - 1 / count
                             + 4 * count * mean * (1 - mean)
@@ -275,7 +287,7 @@ class WilsonScoreIntervalMethod(StatisticalMethod):
                     + self.z_squared
                     + (
                         self.z
-                        * numpy.sqrt(
+                        * np.sqrt(
                             self.z_squared
                             - 1 / count
                             + 4 * count * mean * (1 - mean)
@@ -297,6 +309,9 @@ class WilsonScoreIntervalMethod(StatisticalMethod):
         # Return interval
         return self._get_interval(self.mean, self.count)
 
+    def is_sound(self) -> bool:
+        return False
+
 
 # The normal approximation based confidence interval, for binomial proportions also known as the Wald interval
 #
@@ -317,7 +332,7 @@ class NormalIntervalMethod(StatisticalMethod):
         epsilon: float | None = None,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 30,
     ):
@@ -350,6 +365,9 @@ class NormalIntervalMethod(StatisticalMethod):
         converged = self.epsilon is None or self._check_intv_2epsilon(intv)
         return converged, intv
 
+    def is_sound(self) -> bool:
+        return False
+
 
 # The Student's t approximation based confidence interval
 #
@@ -370,7 +388,7 @@ class StudentsTMethod(NormalIntervalMethod):
         epsilon: float | None = None,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 30,
     ):
@@ -382,6 +400,9 @@ class StudentsTMethod(NormalIntervalMethod):
         # Return interval
         self.z = t(df=self.count - 1).ppf(1.0 - 0.5 * self.kappa)
         return super().get_interval()
+
+    def is_sound(self) -> bool:
+        return False
 
 
 # Hoeffding's inequality, as described in
@@ -408,7 +429,7 @@ class HoeffdingMethod(StatisticalMethod):
         epsilon: float | None = 0.1,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 2,
     ):
@@ -436,8 +457,8 @@ class HoeffdingMethod(StatisticalMethod):
         if self.epsilon is not None:
             # n = ln(2/kappa) / 2*(epsilon/(b-a))^2
             scaled_epsilon = self.epsilon / (self.b - self.a)
-            self.worst_case_samples = numpy.ceil(
-                numpy.log(2.0 / self.kappa) / (scaled_epsilon * scaled_epsilon * 2.0),
+            self.worst_case_samples = np.ceil(
+                np.log(2.0 / self.kappa) / (scaled_epsilon * scaled_epsilon * 2.0),
             )
 
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
@@ -449,10 +470,13 @@ class HoeffdingMethod(StatisticalMethod):
         epsilon = self.epsilon
         if epsilon is None or self.count < self.worst_case_samples:
             # epsilon = (b - a) * sqrt(ln(2/kappa) / 2n)
-            epsilon = (self.b - self.a) * numpy.sqrt(numpy.log(2.0 / self.kappa) / (2.0 * self.count))
+            epsilon = (self.b - self.a) * np.sqrt(np.log(2.0 / self.kappa) / (2.0 * self.count))
 
         # Return interval
         return self.count >= self.worst_case_samples, (self.mean - epsilon, self.mean + epsilon)
+
+    def is_sound(self) -> bool:
+        return True
 
 
 # Confidence interval around the mean using the
@@ -476,7 +500,7 @@ class DKWMethod(StatisticalMethod):
         epsilon: float | None = None,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 2,
     ):
@@ -511,7 +535,7 @@ class DKWMethod(StatisticalMethod):
             return False, None
 
         # Calculate epsilon (same formula as for Hoeffding)
-        epsilon = numpy.sqrt(numpy.log(2.0 / self.kappa) / (2.0 * self.count))
+        epsilon = np.sqrt(np.log(2.0 / self.kappa) / (2.0 * self.count))
 
         # Determine how many observations to count fully
         obs_prob = 1.0 / self.count
@@ -532,6 +556,9 @@ class DKWMethod(StatisticalMethod):
             l += self.samples[obs_to_consider_fully] * remainingProbability
             u += self.samples[self.count - obs_to_consider_fully - 1] * remainingProbability
         return True, (l, u)
+
+    def is_sound(self) -> bool:
+        return True
 
 
 # The EBStop algorithm as described in
@@ -554,7 +581,7 @@ class EBStopMethod(StatisticalMethod):
         epsilon: float | None = 0.1,
         kappa: float = 0.05,
         relative_error: bool = False,
-        bounds: tuple[float | None, float | None] = (-numpy.inf, numpy.inf),
+        bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
         binomial: bool = False,
         min_samples: int = 2,
     ):
@@ -568,7 +595,7 @@ class EBStopMethod(StatisticalMethod):
             max(2, min_samples),
         )
         self.lb = 0.0
-        self.ub = numpy.inf
+        self.ub = np.inf
 
         assert self.min_samples >= 2, "The EBStop method requires at least two samples."
 
@@ -582,18 +609,20 @@ class EBStopMethod(StatisticalMethod):
         # We return the interval [l, u] = [v / (1.0 + ε), v / (1.0 - ε)] (assuming v >= 0 w.l.o.g.),
         # so its width is v / (1.0 - ε) - v / (1.0 + ε), which can be > 2ε * (l + u)/2.
         # To compensate, we solve 1/(1 - x) - 1/(1 + x) = 2ε (with 0 < x < 1, 0 < epsilon < 1) for x, giving us the formula below for the necessary compensated ε:
-        self.compensated_epsilon = (numpy.sqrt(1.0 / (self.epsilon**2) + 4) * self.epsilon - 1) / (2 * self.epsilon)
+        self.compensated_epsilon = (np.sqrt(1.0 / (self.epsilon**2) + 4) * self.epsilon - 1) / (
+            2 * self.epsilon
+        )
 
     def _d(self, t):
         return 1 / (t * (t + 1))
 
-    def add_sample(self, x: np.array):
+    def add_sample(self, x: float):
         super().add_sample(x)
 
         # Process sample
-        log3dt = numpy.log(3.0 / self._d(self.count))
+        log3dt = np.log(3.0 / self._d(self.count))
         c_t = (
-            self.stddev * numpy.sqrt(2.0 * log3dt / self.count)
+            self.stddev * np.sqrt(2.0 * log3dt / self.count)
             + 3.0 * (self.b - self.a) * log3dt / self.count
         )
         self.lb = max(self.lb, abs(self.mean) - c_t)
@@ -613,9 +642,12 @@ class EBStopMethod(StatisticalMethod):
             1.0 - self.compensated_epsilon
         ) * self.ub
         rel_center = (
-            numpy.sign(self.mean)
+            np.sign(self.mean)
             * 0.5
-            * ((1.0 + self.compensated_epsilon) * self.lb + (1.0 - self.compensated_epsilon) * self.ub)
+            * (
+                (1.0 + self.compensated_epsilon) * self.lb
+                + (1.0 - self.compensated_epsilon) * self.ub
+            )
         )
         # ...and return interval:
         # EBStop guarantees that, with the given confidence, if we stop, then |rel_center - true value| <= ε * true value,
@@ -636,3 +668,6 @@ class EBStopMethod(StatisticalMethod):
             )
 
         return stopping_criterion, (l, u)
+
+    def is_sound(self) -> bool:
+        return True

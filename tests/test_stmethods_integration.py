@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import shutil
 from pathlib import Path
@@ -14,7 +15,7 @@ from stable_baselines3.common.monitor import Monitor
 
 import pydsmc.property as prop
 from pydsmc.evaluator import Evaluator
-from pydsmc.json_translator import jsons_to_df
+from pydsmc.json_parser import jsons_to_df
 from pydsmc.statistics import (
     ClopperPearsonIntervalMethod,
     DKWMethod,
@@ -48,7 +49,7 @@ def setup_module():
     )
 
     # Setup properties
-    properties: list[prop.Property] = {}
+    properties: dict[str, prop.Property] = {}
 
     properties["binomial_abs_sound"] = prop.create_custom_property(
         name="goal_reaching_prob_binomial_abs_sound",
@@ -273,6 +274,8 @@ def setup_module():
         "properties": properties,
         "fixed_df": fixed_df,
         "seq_df": seq_df,
+        "SEQ_LOG_DIR": SEQ_LOG_DIR,
+        "FIXED_LOG_DIR": FIXED_LOG_DIR,
     }
     yield data
     # Perform teardown tasks after all tests in the file
@@ -281,8 +284,8 @@ def setup_module():
         env.close()
 
     print("\nDeleting test evaluation results...")
-    shutil.rmtree(SEQ_LOG_DIR / "eval_0", ignore_errors=True)
-    shutil.rmtree(FIXED_LOG_DIR / "eval_0", ignore_errors=True)
+    shutil.rmtree(SEQ_LOG_DIR, ignore_errors=True)
+    shutil.rmtree(FIXED_LOG_DIR, ignore_errors=True)
 
 
 def assert_convergence(
@@ -329,7 +332,200 @@ def assert_statistics_selection(property, st_method_cls):
     )
 
 
-### --- BINOMIAL --- ###
+@pytest.mark.parametrize(
+    ("time_limit", "episode_limit"),
+    [
+        (1 / 6, None),  # 10 seconds, should not suffice for convergence
+        (None, 100),  # 100 episodes, should not suffice for convergence
+    ],
+)
+def test_fallback_selection(setup_module, time_limit, episode_limit):
+    """
+    Test that the fallback selection works correctly.
+    """
+
+    properties = {}
+    properties["binomial_abs_sound"] = prop.create_custom_property(
+        name="goal_reaching_prob_binomial_abs_sound",
+        binomial=True,
+        sound=True,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=False,
+        bounds=(0, 1),
+        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
+        >= self.goal_reward - 1e-8,
+        goal_reward=100,
+    )
+    properties["binomial_rel_sound"] = prop.create_custom_property(
+        name="goal_reaching_prob_binomial_rel_sound",
+        binomial=True,
+        sound=True,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=True,
+        bounds=(0, 1),
+        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
+        >= self.goal_reward - 1e-8,
+        goal_reward=100,
+    )
+    properties["binomial_abs_unsound"] = prop.create_custom_property(
+        name="goal_reaching_prob_binomial_abs_unsound",
+        binomial=True,
+        sound=False,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=False,
+        bounds=(0, 1),
+        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
+        >= self.goal_reward - 1e-8,
+        goal_reward=100,
+    )
+    properties["binomial_rel_unsound"] = prop.create_custom_property(
+        name="goal_reaching_prob_binomial_rel_unsound",
+        binomial=True,
+        sound=False,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=True,
+        bounds=(0, 1),
+        check_fn=lambda self, t: np.sum(np.fromiter((s[2] for s in t), dtype=np.float32))
+        >= self.goal_reward - 1e-8,
+        goal_reward=100,
+    )
+
+    properties["bounded_abs_sound"] = prop.create_predefined_property(
+        property_id="return",
+        name="return_bounded_abs_sound",
+        sound=True,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=False,
+        bounds=(-100, 100),
+    )
+    properties["bounded_rel_sound"] = prop.create_predefined_property(
+        property_id="return",
+        name="return_bounded_rel_sound",
+        sound=True,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=True,
+        bounds=(-100, 100),
+    )
+    properties["bounded_abs_unsound"] = prop.create_predefined_property(
+        property_id="return",
+        name="return_bounded_abs_unsound",
+        sound=False,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=False,
+        bounds=(-100, 100),
+    )
+    properties["bounded_rel_unsound"] = prop.create_predefined_property(
+        property_id="return",
+        name="return_bounded_rel_unsound",
+        sound=False,
+        epsilon=1e-3,
+        kappa=0.05,
+        relative_error=True,
+        bounds=(-100, 100),
+    )
+
+    properties["unbounded_rel"] = (
+        prop.create_predefined_property(  # one-sided; effectively bounded by truncation
+            property_id="episode_length",
+            name="episode_length_unbounded_rel",
+            epsilon=1e-3,
+            kappa=0.05,
+            relative_error=True,
+            bounds=(0, np.inf),
+        )
+    )
+    properties["unbounded_abs"] = (
+        prop.create_predefined_property(  # one-sided; effectively bounded by truncation
+            property_id="episode_length",
+            name="episode_length_unbounded_abs",
+            epsilon=1e-3,
+            kappa=0.05,
+            relative_error=False,
+            bounds=(0, np.inf),
+        )
+    )
+
+    # Check for correct initial assignment of statistical methods
+    assert_statistics_selection(properties["binomial_abs_sound"], ClopperPearsonIntervalMethod)
+    assert_statistics_selection(properties["binomial_rel_sound"], EBStopMethod)
+    assert_statistics_selection(properties["binomial_abs_unsound"], NormalIntervalMethod)
+    assert_statistics_selection(properties["binomial_rel_unsound"], NormalIntervalMethod)
+    assert_statistics_selection(properties["bounded_abs_sound"], HoeffdingMethod)
+    assert_statistics_selection(properties["bounded_rel_sound"], EBStopMethod)
+    assert_statistics_selection(properties["bounded_abs_unsound"], StudentsTMethod)
+    assert_statistics_selection(properties["bounded_rel_unsound"], StudentsTMethod)
+    assert_statistics_selection(properties["unbounded_rel"], StudentsTMethod)
+    assert_statistics_selection(properties["unbounded_abs"], StudentsTMethod)
+
+    for p in properties.values():
+        assert p.epsilon is not None, "Epsilon should not be None for fallback selection."
+
+    # Register properties
+    NUM_THREADS = 1
+    NUM_PAR_ENVS = 5
+    SEED = 42
+    TRUNCATE_LIMIT = 100
+    FIXED_LOG_DIR = setup_module["FIXED_LOG_DIR"]
+
+    # Intialize evaluation environment
+    envs = create_eval_envs(
+        num_threads=NUM_THREADS,
+        num_envs_per_thread=NUM_PAR_ENVS,
+        env_seed=SEED,
+        gym_id="pgtg-v3",
+        wrappers=[FlattenObservation, Monitor],
+        vecenv_cls=gym.vector.SyncVectorEnv,
+        max_episode_steps=TRUNCATE_LIMIT,
+    )
+    evaluator = Evaluator(env=envs, log_dir=FIXED_LOG_DIR)
+    evaluator.register_properties(properties.values())
+
+    # Run evaluation
+    evaluator.eval(
+        agent=setup_module["agent"],
+        predict_fn=setup_module["agent"].predict,
+        time_limit=time_limit,
+        episode_limit=episode_limit,
+        save_every_n_episodes=100,
+        num_initial_episodes=100,
+        num_episodes_per_policy_run=50,
+        save_full_results=False,
+        stop_on_convergence=True,
+        num_threads=NUM_THREADS,
+        deterministic=True,
+    )
+
+    # Check for correct final assignment of statistical methods
+    assert_statistics_selection(properties["binomial_abs_sound"], ClopperPearsonIntervalMethod)
+    assert_statistics_selection(properties["binomial_rel_sound"], ClopperPearsonIntervalMethod)
+    assert_statistics_selection(properties["binomial_abs_unsound"], NormalIntervalMethod)
+    assert_statistics_selection(properties["binomial_rel_unsound"], NormalIntervalMethod)
+    # Should be DKW, but DKW needs to store ALL samples
+    assert_statistics_selection(properties["bounded_abs_sound"], StudentsTMethod)
+    # Should be DKW, but DKW needs to store ALL samples
+    assert_statistics_selection(properties["bounded_rel_sound"], StudentsTMethod)
+    assert_statistics_selection(properties["bounded_abs_unsound"], StudentsTMethod)
+    assert_statistics_selection(properties["bounded_rel_unsound"], StudentsTMethod)
+    assert_statistics_selection(properties["unbounded_rel"], StudentsTMethod)
+    assert_statistics_selection(properties["unbounded_abs"], StudentsTMethod)
+
+    for p in properties.values():
+        stored_settings_path = p.property_dir / "settings.json"
+        with stored_settings_path.open() as f:
+            settings = json.load(f)
+
+        assert settings["st_method"] == p.st_method.__class__.__name__
+        assert "original_st_method" in settings
+
+
+### --- SEQUENTIAL --- ###
 @pytest.mark.parametrize(
     ("test_name", "method", "total_episodes", "mean", "variance", "std", "intv"),
     [

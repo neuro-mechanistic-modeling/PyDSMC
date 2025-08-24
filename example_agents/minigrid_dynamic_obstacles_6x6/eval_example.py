@@ -77,7 +77,7 @@ if __name__ == "__main__":
     )
     properties.append(
         prop.create_predefined_property(
-            property_id="goal_reaching_prob",
+            property_id="goal_reaching_probability",
             epsilon=0.025,
             kappa=0.05,
             relative_error=False,

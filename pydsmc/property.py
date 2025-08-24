@@ -5,14 +5,15 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
 import pydsmc.statistics as st
 from pydsmc.utils import DSMCLogger, is_bounded, is_valid_bounds
 
-SelfProperty = TypeVar("SelfProperty", bound="Property")
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 # TODO: ONLY ADD PROPERTIES WE ACTUALLY WANT TO KEEP
 __PRE_DEFINED_PROPERTIES = {
@@ -53,10 +54,10 @@ __PRE_DEFINED_PROPERTIES = {
         "binomial": True,
     },
 }
-# TODO: Legacy, remove ig.
-__PRE_DEFINED_PROPERTIES["goal_reaching_prob"] = __PRE_DEFINED_PROPERTIES[
-    "goal_reaching_probability"
-]
+
+
+def get_predefined_properties() -> list[str]:
+    return list(__PRE_DEFINED_PROPERTIES.keys())
 
 
 # base class for evaluation properties
@@ -65,14 +66,8 @@ class Property:
         self,
         name: str,
         st_method: st.StatisticalMethod,
-        check_fn: Callable[[SelfProperty, list[tuple[Any, Any, Any, bool, bool, Any]]], float]
-        | None = None,
-        epsilon: float | None = 0.05,
-        kappa: float = 0.05,
-        bounds: tuple[float | None, float | None] = (None, None),
+        check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, Any]]], float],
         *,
-        relative_error: bool = False,
-        binomial: bool = False,
         max_episodes_zero_variance: int = 1000,  # TODO: Good default?
         **kwargs,
     ):
@@ -80,11 +75,6 @@ class Property:
         self.name = name
         self.st_method = st_method
         self.check_fn = check_fn
-        self.epsilon = epsilon
-        self.kappa = kappa
-        self.relative_error = relative_error
-        self.bounds = bounds
-        self.binomial = binomial
         self.max_episodes_zero_variance = max_episodes_zero_variance
 
         # Internals
@@ -92,26 +82,23 @@ class Property:
         self.save_full_results = False
         self.results_lock = threading.Lock()
 
-        if not is_valid_bounds(bounds):
-            raise ValueError(f"Invalid bounds: {bounds}")
-        if epsilon is None and relative_error:
-            raise ValueError("Relative error requires epsilon to be set")
-
         # Store all additional keyword arguments as attributes of our new custom property
         for key, value in kwargs.items():
-            setattr(self, key, value)
+            # Ignore existing attributes, like the ones defined by the st_method (e.g. epsilon, kappa, ...)
+            if not hasattr(self, key):
+                setattr(self, key, value)
 
     # we assume a trajectory is a list of tuples (observation, action, reward, terminated, truncated, info)
     def check(self, trajectory: list[tuple[Any, Any, Any, bool, bool, Any]]) -> float:
         return self.check_fn(self, trajectory)
 
-    def add_samples(self, xs: np.array) -> None:
+    def add_samples(self, xs: Iterable[float]) -> None:
         # Since `add_sample` is overwritten by different statistical methods
         # we do not want to make adding multiple samples more efficient than looping one-by-one
         for x in xs:
             self.st_method.add_sample(x)
 
-    def add_sample(self, x) -> None:
+    def add_sample(self, x: float) -> None:
         self.st_method.add_sample(x)
 
         if self.save_full_results:
@@ -146,7 +133,13 @@ class Property:
         self.save_path = self.property_dir / "results.jsonl"
         self.full_results_path = self.property_dir / "full_results.jsonl"
 
-    def save_settings(self, log_dir: Path, exclude: list | None = None) -> None:
+    def save_settings(
+        self,
+        log_dir: Path | None = None,
+        exclude: list | None = None,
+        *,
+        additional_entries: dict[str, Any] | None = None,
+    ) -> None:
         if exclude is None:
             exclude = []
         settings = self.__dict__.copy()
@@ -164,8 +157,13 @@ class Property:
             settings.pop(key, None)
         settings["st_method"] = self.st_method.__class__.__name__
         settings["property_dir"] = str(self.property_dir)
+        settings = settings | (additional_entries or {})
 
-        property_dir = log_dir / f"{self.name}_{self.property_id}"
+        if log_dir is not None:
+            property_dir = log_dir / f"{self.name}_{self.property_id}"
+        else:
+            property_dir = self.property_dir
+
         property_dir.mkdir(parents=True, exist_ok=True)
         with (property_dir / "settings.json").open("w") as f:
             json.dump(settings, f, indent=4)
@@ -175,8 +173,8 @@ class Property:
         self,
         overwrite: bool = False,
         logging_fn: Callable = print,
-    ):
-        results = {}
+    ) -> None:
+        results: dict[str, Any] = {}
         results["name"] = self.name
         results["property_id"] = self.property_id
         results["total_episodes"] = self.num_episodes
@@ -191,7 +189,7 @@ class Property:
             f.write(json.dumps(results, indent=None) + "\n")
         logging_fn(f"Results for property {self.name} saved to {self.save_path}")
 
-    def dump_buffer(self, overwrite: bool = False):
+    def dump_buffer(self, overwrite: bool = False) -> None:
         with self.results_lock:
             if self.__full_results:
                 with self.full_results_path.open("w" if overwrite else "a") as f:
@@ -204,6 +202,58 @@ class Property:
         current_time = str(time.time_ns())
         property_id = hashlib.sha256(current_time.encode()).hexdigest()[:6]
         self.property_id = property_id
+
+    def fallback_st_method(self) -> str:
+        assert self.epsilon is not None, "Can only fallback in case of sequential setting"
+        prev_st_method = self.st_method.__class__.__name__
+
+        prev_mean = self.mean
+        prev_variance = self.variance
+        prev_std = self.std
+        prev_count = self.num_episodes
+        prev_m2 = self.st_method._m2
+
+        # We cannot replace by sound method if it is not binomial since we do not store all results
+        # that are needed for the sound DKW method.
+        fb_sound = self.st_method.is_sound() and self.binomial
+
+        self.st_method = select_statistical_method(
+            epsilon=None,  # Fallback means fixed run setting -> no epsilon
+            kappa=self.kappa,
+            bounds=self.bounds,
+            relative_error=False,  # No relative error for fixed run setting
+            binomial=self.binomial,
+            sound=fb_sound,
+        )
+
+        self.st_method.count = prev_count
+        self.st_method.mean = prev_mean
+        self.st_method.variance = prev_variance
+        self.st_method.stddev = prev_std
+        self.st_method._m2 = prev_m2
+
+        return prev_st_method
+
+    # Refer to statistical method, to avoid errors due to duplicated variables
+    @property
+    def kappa(self) -> float:
+        return self.st_method.kappa
+
+    @property
+    def epsilon(self) -> float | None:
+        return self.st_method.epsilon
+
+    @property
+    def binomial(self) -> bool:
+        return self.st_method.binomial
+
+    @property
+    def bounds(self) -> tuple[float | None, float | None]:
+        return (self.st_method.a, self.st_method.b)
+
+    @property
+    def relative_error(self) -> bool:
+        return self.st_method.relative_error
 
     @property
     def num_episodes(self) -> int:
@@ -321,9 +371,6 @@ def create_predefined_property(
     return Property(
         name=name,
         st_method=st_method,
-        epsilon=epsilon,
-        kappa=kappa,
-        relative_error=relative_error,
         **property_parameters,
     )
 
@@ -332,7 +379,7 @@ def create_predefined_property(
 def create_custom_property(
     name: str,
     check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, Any]]], float],
-    st_method: st.StatisticalMethod = None,
+    st_method: st.StatisticalMethod | None = None,
     epsilon: float | None = 0.1,
     kappa: float = 0.05,
     bounds: tuple[float | None, float | None] = (-np.inf, np.inf),
@@ -362,10 +409,5 @@ def create_custom_property(
         name=name,
         st_method=st_method,
         check_fn=check_fn,
-        epsilon=epsilon,
-        kappa=kappa,
-        relative_error=relative_error,
-        bounds=bounds,
-        binomial=binomial,
         **kwargs,
     )
