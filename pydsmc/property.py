@@ -20,7 +20,7 @@ __PRE_DEFINED_PROPERTIES = {
     # Records the accumulated discounted reward
     "return": {
         "check_fn": lambda self, t: np.sum(
-            [t[i][2] * np.power(self.gamma, i) for i in range(len(t))],
+            [t[i].reward * np.power(self.gamma, i) for i in range(len(t))],
         ),
         "binomial": False,
         "bounds": (-np.inf, np.inf),
@@ -35,21 +35,21 @@ __PRE_DEFINED_PROPERTIES = {
     # Records how often the goal was reached. Goal reached here means that the last reward is at least the goal reward
     # Alas, no general easy way to verify whether a 'goal' was reached via the gymnasium interface
     "goal_reaching_probability": {
-        "check_fn": lambda self, t: t[-1][2] >= self.goal_reward,
+        "check_fn": lambda self, t: t[-1].reward >= self.goal_reward,
         "bounds": (0.0, 1.0),
         "binomial": True,
         "goal_reward": 1,
     },
     # Records whether the episode was forcefully terminated after reaching the maximum episode length
     "truncation": {
-        "check_fn": lambda self, t: t[-1][4],
+        "check_fn": lambda self, t: t[-1].truncated,
         "bounds": (0.0, 1.0),
         "binomial": True,
     },
     # Records unsuccesful terminations, excluding truncations
     # Unsuccesful means that the the accumulated _undiscounted_ reward is non-positive
     "unsuccesful_termination": {
-        "check_fn": lambda self, t: t[-1][3] and np.sum([s[2] for s in t]) <= 0,
+        "check_fn": lambda self, t: t[-1].terminated and np.sum([s.reward for s in t]) <= 0,
         "bounds": (0.0, 1.0),
         "binomial": True,
     },
@@ -60,13 +60,47 @@ def get_predefined_properties() -> list[str]:
     return list(__PRE_DEFINED_PROPERTIES.keys())
 
 
+class StepWrapper:
+    __slots__ = ("_t",)
+
+    def __init__(self, t: tuple):
+        self._t = t
+
+    @property
+    def state(self):
+        return self._t[0]
+
+    @property
+    def action(self):
+        return self._t[1]
+
+    @property
+    def reward(self):
+        return self._t[2]
+
+    @property
+    def terminated(self):
+        return self._t[3]
+
+    @property
+    def truncated(self):
+        return self._t[4]
+
+    @property
+    def info(self):
+        return self._t[5]
+
+    def __getitem__(self, index):
+        return self._t[index]
+
+
 # base class for evaluation properties
 class Property:
     def __init__(
         self,
         name: str,
         st_method: st.StatisticalMethod,
-        check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, Any]]], float],
+        check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, dict]]], float],
         *,
         max_episodes_zero_variance: int = 1000,  # TODO: Good default?
         **kwargs,
@@ -74,7 +108,9 @@ class Property:
         # Attributes defining the property
         self.name = name
         self.st_method = st_method
-        self.check_fn = check_fn
+        # TODO: If we are doing it like this. no need for the s argument in check_fn.
+        # 'self' is already available via closure
+        self.check_fn = lambda s, t: check_fn(s, [StepWrapper(step) for step in t])
         self.max_episodes_zero_variance = max_episodes_zero_variance
 
         # Internals
@@ -89,7 +125,7 @@ class Property:
                 setattr(self, key, value)
 
     # we assume a trajectory is a list of tuples (observation, action, reward, terminated, truncated, info)
-    def check(self, trajectory: list[tuple[Any, Any, Any, bool, bool, Any]]) -> float:
+    def check(self, trajectory: list[tuple[Any, Any, Any, bool, bool, dict]]) -> float:
         return self.check_fn(self, trajectory)
 
     def add_samples(self, xs: Iterable[float]) -> None:
@@ -378,7 +414,7 @@ def create_predefined_property(
 # create a new property that can be registered with the evaluator
 def create_custom_property(
     name: str,
-    check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, Any]]], float],
+    check_fn: Callable[[Property, list[tuple[Any, Any, Any, bool, bool, dict]]], float],
     st_method: st.StatisticalMethod | None = None,
     epsilon: float | None = 0.1,
     kappa: float = 0.05,
