@@ -157,8 +157,21 @@ For each property, PyDSMC automatically selects an appropriate statistical metho
 
 If you use PyDSMC in your work, you can use the following BibTeX entry, citing the official Version of Record published at QEST2025.
 
-> [!NOTE]
-> The official version of record has not been published yet. Once published, there will be a bibtex entry here.
+```bibtex
+@inproceedings{grosPyDSMC2025,
+  title      = {{{PyDSMC}}: {{Statistical Model Checking}} for~{{Neural Agents Using}} the~{{Gymnasium Interface}}},
+  shorttitle = {{{PyDSMC}}},
+  booktitle  = {Quantitative {{Evaluation}} of {{Systems}} and {{Formal Modeling}} and {{Analysis}} of {{Timed Systems}}},
+  author     = {Gros, Timo P. and Hartmanns, Arnd and Hoese, Ivo and Meyer, Joshua and M{\"u}ller, Nicola J. and Wolf, Verena},
+  editor     = {Prabhakar, Pavithra and Vandin, Andrea},
+  year       = {2025},
+  pages      = {134--156},
+  publisher  = {Springer Nature Switzerland},
+  address    = {Cham},
+  doi        = {10.1007/978-3-032-05792-1_8},
+  isbn       = {978-3-032-05792-1},
+}
+```
 
 ## License
 

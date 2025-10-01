@@ -204,12 +204,7 @@ class Property:
         with (property_dir / "settings.json").open("w") as f:
             json.dump(settings, f, indent=4)
 
-    # Saves the results to a json file
-    def save_results(
-        self,
-        overwrite: bool = False,
-        logging_fn: Callable = print,
-    ) -> None:
+    def get_log_line(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
         results["name"] = self.name
         results["property_id"] = self.property_id
@@ -220,6 +215,16 @@ class Property:
         converged, intv = self.get_interval()
         results["confidence_interval"] = intv
         results["intv_converged"] = bool(converged)
+
+        return results
+
+    # Saves the results to a json file
+    def save_results(
+        self,
+        overwrite: bool = False,
+        logging_fn: Callable = print,
+    ) -> None:
+        results = self.get_log_line()
 
         with self.save_path.open("w" if overwrite else "a") as f:
             f.write(json.dumps(results, indent=None) + "\n")
