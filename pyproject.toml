@@ -6,7 +6,7 @@ build-backend = "poetry.core.masonry.api"
 name = "pydsmc"
 description = "Statistical Model Checking for Neural Agents Using the Gymnasium Interface"
 dynamic = ["classifiers"]
-version = "0.3.1"
+version = "0.3.2"
 requires-python = ">= 3.9"
 
 dependencies = [

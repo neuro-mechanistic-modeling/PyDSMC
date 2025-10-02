@@ -502,7 +502,7 @@ class Evaluator:
         elif self.gym_vecenv:
             env_seeds = [vec_env.np_random_seed for vec_env in self.envs]
         else:
-            env_seeds = [[e.np_random_seed for e in vec_env.envs] for vec_env in self.envs]
+            env_seeds = [vec_env.get_attr("np_random_seed") for vec_env in self.envs]
 
         eval_params = eval_params | {
             "num_episodes_per_policy_run": num_episodes_per_policy_run,
