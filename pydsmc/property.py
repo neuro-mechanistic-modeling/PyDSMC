@@ -96,6 +96,10 @@ class StepWrapper:
 
 # base class for evaluation properties
 class Property:
+    property_dir: Path | None
+    save_path: Path | None
+    full_results_path: Path | None
+
     def __init__(
         self,
         name: str,
@@ -155,7 +159,7 @@ class Property:
         converged, conf_intv = self.get_interval()
         return converged
 
-    def setup_eval(self, log_dir: Path | str, save_full_results: bool = False) -> None:
+    def setup_eval(self, log_dir: Path | str | None, save_full_results: bool = False) -> None:
         self.st_method.count = 0
         self.st_method.mean = 0.0
         self.st_method._m2 = 0.0
@@ -165,9 +169,14 @@ class Property:
         # Setup internals
         self.save_full_results = save_full_results
         self.__full_results = []
-        self.property_dir = Path(log_dir) / f"{self.name}_{self.property_id}"
-        self.save_path = self.property_dir / "results.jsonl"
-        self.full_results_path = self.property_dir / "full_results.jsonl"
+        if log_dir is not None:
+            self.property_dir = Path(log_dir) / f"{self.name}_{self.property_id}"
+            self.save_path = self.property_dir / "results.jsonl"
+            self.full_results_path = self.property_dir / "full_results.jsonl"
+        else:
+            self.property_dir = None
+            self.save_path = None
+            self.full_results_path = None
 
     def save_settings(
         self,
@@ -175,9 +184,10 @@ class Property:
         exclude: list | None = None,
         *,
         additional_entries: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict:
         if exclude is None:
             exclude = []
+
         settings = self.__dict__.copy()
         for key in [
             *exclude,
@@ -192,8 +202,11 @@ class Property:
         ]:
             settings.pop(key, None)
         settings["st_method"] = self.st_method.__class__.__name__
-        settings["property_dir"] = str(self.property_dir)
+        settings["property_dir"] = str(self.property_dir) if self.property_dir is not None else None
         settings = settings | (additional_entries or {})
+
+        if log_dir is None and self.property_dir is None:
+            return settings
 
         if log_dir is not None:
             property_dir = log_dir / f"{self.name}_{self.property_id}"
@@ -203,6 +216,8 @@ class Property:
         property_dir.mkdir(parents=True, exist_ok=True)
         with (property_dir / "settings.json").open("w") as f:
             json.dump(settings, f, indent=4)
+
+        return settings
 
     def get_log_line(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
@@ -224,6 +239,9 @@ class Property:
         overwrite: bool = False,
         logging_fn: Callable = print,
     ) -> None:
+        if self.save_path is None:
+            return
+
         results = self.get_log_line()
 
         with self.save_path.open("w" if overwrite else "a") as f:
@@ -231,6 +249,9 @@ class Property:
         logging_fn(f"Results for property {self.name} saved to {self.save_path}")
 
     def dump_buffer(self, overwrite: bool = False) -> None:
+        if self.full_results_path is None:
+            return
+
         with self.results_lock:
             if self.__full_results:
                 with self.full_results_path.open("w" if overwrite else "a") as f:

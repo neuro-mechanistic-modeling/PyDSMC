@@ -27,22 +27,25 @@ if TYPE_CHECKING:
 # Main evaluator class
 class Evaluator:
     envs: list[Any]
+    time_passed: float
 
     def __init__(
         self,
         env: list[gym.vector.VectorEnv] | list[SB3VecEnv] | list[GymEnv] | GymEnv,
-        log_dir: Path | str | os.PathLike[str] = "logs",
+        log_dir: Path | str | os.PathLike[str] | None = "logs",
         log_subdir: str = "eval",
         log_level: int = logging.INFO,
         *,
         colorize_logs: bool = False,
     ) -> None:
-        self.log_base = Path(log_dir)
-        self.log_base.mkdir(exist_ok=True, parents=True)
+        self.log_base = Path(log_dir) if log_dir is not None else None
+        if self.log_base is not None:
+            self.log_base.mkdir(exist_ok=True, parents=True)
         self.log_subdir = log_subdir
         self.properties: list[Property] = []
         self.total_episodes = 0
-        self.next_log_time = 0
+        self.time_passed = 0
+        self.next_log_time = 0 if log_dir is not None else np.inf
 
         # For parallel episode execution
         self.lock = threading.Lock()
@@ -229,12 +232,12 @@ class Evaluator:
                     **predict_kwargs,
                 )
 
-                time_passed = time.perf_counter() - start_time
+                self.time_passed = time.perf_counter() - start_time
                 if stop_on_convergence and all(prop.converged() for prop in self.properties):
                     self.logger.info("All properties converged!")
                     break
 
-                if (time_limit is not None) and (time_passed >= time_limit_seconds):
+                if (time_limit is not None) and (self.time_passed >= time_limit_seconds):
                     self.logger.info("Time limit reached!")
                     self.__check_fallback(stop_on_convergence)
                     break
@@ -249,24 +252,31 @@ class Evaluator:
                     for property_ in self.properties:
                         property_.save_results(overwrite=overwrite, logging_fn=self.logger.debug)
 
-                    save_path = self.log_dir / "resources.jsonl"
-                    with save_path.open("w" if overwrite else "a") as f:
-                        f.write(
-                            json.dumps(
-                                {"total_episodes": self.total_episodes, "time_passed": time_passed},
+                    if self.log_dir is not None:
+                        save_path = self.log_dir / "resources.jsonl"
+                        with save_path.open("w" if overwrite else "a") as f:
+                            f.write(
+                                json.dumps(
+                                    {
+                                        "total_episodes": self.total_episodes,
+                                        "time_passed": self.time_passed,
+                                    },
+                                )
+                                + "\n",
                             )
-                            + "\n",
-                        )
 
                     self.next_log_time = self.total_episodes + save_every_n_episodes
 
         # Save resources at the end again
-        save_path = self.log_dir / "resources.jsonl"
-        with save_path.open("a") as f:
-            f.write(
-                json.dumps({"total_episodes": self.total_episodes, "time_passed": time_passed})
-                + "\n",
-            )
+        if self.log_dir is not None:
+            save_path = self.log_dir / "resources.jsonl"
+            with save_path.open("a") as f:
+                f.write(
+                    json.dumps(
+                        {"total_episodes": self.total_episodes, "time_passed": self.time_passed},
+                    )
+                    + "\n",
+                )
 
         hours, rem = divmod(time.perf_counter() - start_time, 3600)
         minutes, seconds = divmod(rem, 60)
@@ -286,9 +296,10 @@ class Evaluator:
     def clear_properties(self) -> None:
         self.properties = []
 
-    def set_log_dir(self, log_dir: Path | str | os.PathLike = "logs") -> None:
-        self.log_base = Path(log_dir)
-        self.log_base.mkdir(exist_ok=True, parents=True)
+    def set_log_dir(self, log_dir: Path | str | os.PathLike | None = "logs") -> None:
+        self.log_base = Path(log_dir) if log_dir is not None else None
+        if self.log_base is not None:
+            self.log_base.mkdir(exist_ok=True, parents=True)
 
     def __get_thread_env(self) -> gym.vector.VectorEnv | SB3VecEnv:
         try:
@@ -412,7 +423,7 @@ class Evaluator:
                 prop_check = property_.check(trajectory)
                 property_.add_sample(prop_check)
 
-        if save_full_trajectory:
+        if save_full_trajectory and self.log_dir is not None:
             with (self.log_dir / "trajectories.jsonl").open("a") as f:
                 for trajectory in flat_trajectories:
                     f.write(json.dumps(trajectory, cls=NumpyEncoder) + "\n")
@@ -451,6 +462,9 @@ class Evaluator:
             _result = future.result()  # Wait for completion
 
     def __save_eval_params(self, eval_settings: dict) -> None:
+        if self.log_dir is None:
+            return
+
         save_path = self.log_dir / "settings.json"
         with save_path.open("w") as f:
             json.dump(eval_settings, f, indent=4, cls=NumpyEncoder)
@@ -486,8 +500,12 @@ class Evaluator:
             )
 
         self.log_dir = (
-            self.log_base
-            / f"{self.log_subdir}_{Evaluator.__get_next_run_id(self.log_base, self.log_subdir)}"
+            (
+                self.log_base
+                / f"{self.log_subdir}_{Evaluator.__get_next_run_id(self.log_base, self.log_subdir)}"
+            )
+            if self.log_base is not None
+            else None
         )
 
         for property_ in self.properties:
@@ -504,7 +522,7 @@ class Evaluator:
         else:
             env_seeds = [vec_env.get_attr("np_random_seed") for vec_env in self.envs]
 
-        eval_params = eval_params | {
+        self.eval_params = eval_params | {
             "num_episodes_per_policy_run": num_episodes_per_policy_run,
             "num_threads": num_threads,
             "env_seeds": env_seeds,
@@ -512,7 +530,7 @@ class Evaluator:
             "extra_log_info": extra_log_info,
         }
 
-        self.__save_eval_params(eval_params)
+        self.__save_eval_params(self.eval_params)
 
         self.total_episodes = 0
         self.next_free_env = 0
