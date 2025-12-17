@@ -6,7 +6,7 @@ import threading
 import time
 from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import gymnasium as gym
 import numpy as np
@@ -17,7 +17,7 @@ from pydsmc.utils import DSMCLogger, NumpyEncoder
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from stable_baselines3.common.vec_env import VecEnv as SB3VecEnv
 
@@ -176,7 +176,7 @@ class Evaluator:
             "time_limit": time_limit,
         }
 
-        predict_fn = self.__setup_eval(
+        predict_fn, hidden_states = self.__setup_eval(
             agent=agent,
             predict_fn=predict_fn,
             num_episodes_per_policy_run=num_episodes_per_policy_run,
@@ -234,6 +234,7 @@ class Evaluator:
             while True:
                 self.__run_policy(
                     predict_fn=predict_fn,
+                    hidden_states=hidden_states,
                     executor=executor,
                     num_episodes=(
                         num_initial_episodes
@@ -335,6 +336,7 @@ class Evaluator:
     def __run_episodes(
         self,
         predict_fn: Callable,
+        hidden_states: tuple[np.ndarray, ...] | None,
         num_episodes: int,
         *,
         save_full_trajectory: bool,
@@ -361,7 +363,12 @@ class Evaluator:
             [[] for _ in range(num_episodes)] for num_episodes in num_episodes_per_venv
         ]
         while (episodes_done_per_venv < num_episodes_per_venv).any():
-            actions, states = predict_fn(state, **predict_kwargs)
+            actions, hidden_states = predict_fn(
+                state,
+                hidden_states,
+                episode_starts,
+                **predict_kwargs,
+            )
             step_data = env.step(actions)
             processed_infos: list[dict] = [{} for _ in range(self.num_envs)]
 
@@ -378,16 +385,24 @@ class Evaluator:
                         for i in range(self.num_envs):
                             processed_infos[i][key] = array[i]
 
+                dones = [t or tr for t, tr in zip(terminateds, truncateds, strict=True)]
+
             else:
                 # SB3 VecEnv [sadly still merges terminated and truncated]
                 next_states, rewards, dones, infos = step_data
                 if len(infos) > 0:
                     processed_infos = infos
                     truncateds = [infos[i]["TimeLimit.truncated"] for i in range(self.num_envs)]
-                    terminateds = [(a and not b) for a, b in zip(dones, truncateds)]
+                    terminateds = [(a and not b) for a, b in zip(dones, truncateds, strict=True)]
                 else:
                     terminateds = dones
                     truncateds = [False for _ in range(self.num_envs)]
+
+            if hidden_states:  # NOTE: We only support zero initialization for now. Might reconsider
+                for i, done in enumerate(dones):
+                    if done:
+                        hidden_states[0][:, i, :] = 0
+                        hidden_states[1][:, i, :] = 0
 
             for i in range(self.num_envs):
                 if episodes_done_per_venv[i] >= num_episodes_per_venv[i]:
@@ -455,6 +470,7 @@ class Evaluator:
     def __run_policy(
         self,
         predict_fn: Callable,
+        hidden_states: tuple[np.ndarray, ...] | None,
         executor: Executor,
         num_episodes: int = 50,
         num_threads: int = 1,
@@ -467,18 +483,23 @@ class Evaluator:
             [(num_episodes + i) // num_threads for i in range(num_threads)],
             dtype="int",
         )
-        num_episodes_before = [0, *np.cumsum(num_episodes_per_thread).tolist()]
+        num_episodes_before = [0, *np.cumsum(num_episodes_per_thread).tolist()[:-1]]
 
         # Temporarily store the results in numpy arrays of fixed size
         futures = {
             executor.submit(
                 self.__run_episodes,
                 predict_fn=predict_fn,
+                hidden_states=hidden_states,
                 num_episodes=num_episodes,
                 save_full_trajectory=save_full_trajectory,
                 **predict_kwargs,
             ): (num_before, num_episodes)
-            for num_before, num_episodes in zip(num_episodes_before, num_episodes_per_thread)
+            for num_before, num_episodes in zip(
+                num_episodes_before,
+                num_episodes_per_thread,
+                strict=True,
+            )
         }
         for future in as_completed(futures):
             _result = future.result()  # Wait for completion
@@ -503,7 +524,7 @@ class Evaluator:
         *,
         extra_log_info: Any = None,
         save_full_results: bool,
-    ) -> Callable:
+    ) -> tuple[Callable, tuple[np.ndarray, ...] | None]:
         if len(self.envs) < num_threads:
             raise ValueError(
                 f"Number of environments must be at least the same as number of threads. Envs: {len(self.envs)}, threads: {num_threads}. "
@@ -512,6 +533,8 @@ class Evaluator:
 
         if predict_fn is None and agent is not None:
             predict_fn = agent.predict
+
+        hidden_states = None  # NOTE: Expecting the policy to init itself. sb3.RecurrentPPO does so
 
         if not callable(predict_fn):
             raise TypeError("No callable predict function or agent given.")
@@ -560,7 +583,7 @@ class Evaluator:
             num_episodes_per_policy_run if save_every_n_episodes is None else save_every_n_episodes
         )
 
-        return predict_fn
+        return predict_fn, hidden_states
 
     def __end_eval(
         self,

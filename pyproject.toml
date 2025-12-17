@@ -6,7 +6,7 @@ build-backend = "poetry.core.masonry.api"
 name = "pydsmc"
 description = "Statistical Model Checking for Neural Agents Using the Gymnasium Interface"
 dynamic = ["classifiers"]
-version = "0.3.5"
+version = "0.3.6"
 requires-python = ">= 3.10"
 
 dependencies = [
@@ -34,12 +34,19 @@ license-files = ["LICEN[CS]E*"]
 
 [project.optional-dependencies]
 dev = [
-  "pytest (>=8.0.0,<9.0.0)",
+  "pytest (>=9.0.3,<10.0.0)",
   "pgtg (==0.4.1)",
   "pre-commit (>=4.5.0,<5.0.0)",
   "stable-baselines3 (>=2.5.0,<3.0.0)",
+  "ipython",
 ]
-all = ["pydsmc[dev]"]
+examples = [
+  "minigrid (>=3.0.0,<4.0.0)",
+  "ale-py (>=0.10.0,<0.11.0)",
+  "gymnasium-robotics (>=1.4.0,<2.0.0)",
+  "sb3-contrib (>=2.8.0,<3.0.0)",
+]
+all = ["pydsmc[dev,examples]"]
 
 [project.urls]
 Repository = "https://github.com/neuro-mechanistic-modeling/pydsmc"

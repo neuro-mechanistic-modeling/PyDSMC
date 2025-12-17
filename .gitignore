@@ -1,6 +1,7 @@
 # Created by https://www.toptal.com/developers/gitignore/api/linux,python,cuda,c,c++,pycharm,visualstudiocode,macos,windows,latex,zsh
 # Edit at https://www.toptal.com/developers/gitignore?templates=linux,python,cuda,c,c++,pycharm,visualstudiocode,macos,windows,latex,zsh
 
+.mise
 .idea/
 .vscode/
 

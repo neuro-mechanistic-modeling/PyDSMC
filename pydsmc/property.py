@@ -6,7 +6,6 @@ import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from collections.abc import Callable
 
 import numpy as np
 
@@ -14,7 +13,7 @@ import pydsmc.statistics as st
 from pydsmc.utils import DSMCLogger, is_bounded, is_valid_bounds
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 # TODO: ONLY ADD PROPERTIES WE ACTUALLY WANT TO KEEP
 __PRE_DEFINED_PROPERTIES = {
