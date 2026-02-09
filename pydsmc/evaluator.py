@@ -39,10 +39,12 @@ class Evaluator:
         colorize_logs: bool = False,
     ) -> None:
         self.log_base = Path(log_dir) if log_dir is not None else None
+        self.log_dir = None  # Will be set once eval starts
         if self.log_base is not None:
             self.log_base.mkdir(exist_ok=True, parents=True)
         self.log_subdir = log_subdir
         self.properties: list[Property] = []
+        self.eval_params: dict[str, Any] = {}
         self.total_episodes = 0
         self.time_passed = 0
         self.next_log_time = 0 if log_dir is not None else np.inf
