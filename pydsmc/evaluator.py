@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 class Evaluator:
     envs: list[Any]
     time_passed: float
+    log_dir: Path | None
 
     def __init__(
         self,
@@ -109,13 +110,23 @@ class Evaluator:
             for p in self.properties:
                 if not p.converged():
                     prev_st_method = p.fallback_st_method()
+                    if prev_st_method is None:
+                        continue
+
+                    additional_entries = {
+                        "original_st_method": prev_st_method.__class__.__name__,
+                        "st_method": p.st_method.__class__.__name__,
+                    }
                     p.save_settings(
                         self.log_dir,
-                        additional_entries={"original_st_method": prev_st_method},
+                        additional_entries=additional_entries,
                     )
                     self.logger.warning(
-                        f"Property {p.name} did not converge within the resource limit. "
-                        f"Falling back to {p.st_method.__class__.__name__} from {prev_st_method} ",
+                        "Property %s did not converge within the resource limit. "
+                        "Falling back to %s from %s ",
+                        p.name,
+                        p.st_method.__class__.__name__,
+                        prev_st_method.__class__.__name__,
                     )
 
     def eval(
@@ -216,7 +227,7 @@ class Evaluator:
                     property_string += f" in the fixed run setting with min_samples={property_.st_method.min_samples}"
                 else:
                     property_string += (
-                        f" in the sequential setting with epsilon ={property_.epsilon}"
+                        f" in the sequential setting with epsilon={property_.epsilon}"
                     )
                 self.logger.info(property_string)
 
@@ -283,11 +294,20 @@ class Evaluator:
         hours, rem = divmod(time.perf_counter() - start_time, 3600)
         minutes, seconds = divmod(rem, 60)
         self.logger.info(
-            f"Evaluation finished after {self.total_episodes} episodes, which took"  # noqa: G004
-            f" {f'{hours:.0f} hours, ' if hours > 0 else ''}"
-            f" {f'{minutes:.0f} minutes, ' if minutes > 0 else ''}"
-            f" {seconds:.0f} seconds.",
+            f"Evaluation finished after {self.total_episodes} episodes, which took "  # noqa: G004
+            f"{f'{hours:.0f} hours, ' if hours > 0 else ''}"
+            f"{f'{minutes:.0f} minutes, ' if minutes > 0 else ''}"
+            f"{seconds:.0f} seconds.",
         )
+        for property_ in self.properties:
+            converged, intv = property_.get_interval()
+            property_string = f"\t{property_.name}: {property_.mean:.3f} ± {property_.std:.3f}"
+            if intv is not None:
+                property_string += (
+                    f" ([{float(intv[0]):.3f}, {float(intv[1]):.3f}] / "
+                    f"{'converged' if converged else 'not converged'})"
+                )
+            self.logger.info(property_string)
 
         if save_full_results:
             stop_event.set()
@@ -470,7 +490,7 @@ class Evaluator:
         save_path = self.log_dir / "settings.json"
         with save_path.open("w") as f:
             json.dump(eval_settings, f, indent=4, cls=NumpyEncoder)
-        self.logger.info(f"Evaluation settings saved to {save_path}")
+        self.logger.info("Evaluation settings saved to %s", save_path)
 
     def __setup_eval(
         self,

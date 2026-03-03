@@ -5,7 +5,8 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 import numpy as np
 
@@ -46,8 +47,8 @@ __PRE_DEFINED_PROPERTIES = {
         "bounds": (0.0, 1.0),
         "binomial": True,
     },
-    # Records unsuccesful terminations, excluding truncations
-    # Unsuccesful means that the the accumulated _undiscounted_ reward is non-positive
+    # Records unsuccessful terminations, excluding truncations
+    # Unsuccessful means that the the accumulated _undiscounted_ reward is non-positive
     "unsuccesful_termination": {
         "check_fn": lambda self, t: t[-1].terminated and np.sum([s.reward for s in t]) <= 0,
         "bounds": (0.0, 1.0),
@@ -99,6 +100,7 @@ class Property:
     property_dir: Path | None
     save_path: Path | None
     full_results_path: Path | None
+    fallbacked: st.StatisticalMethod | None
 
     def __init__(
         self,
@@ -112,6 +114,7 @@ class Property:
         # Attributes defining the property
         self.name = name
         self.st_method = st_method
+        self.fallbacked = None
         # TODO: If we are doing it like this. no need for the s argument in check_fn.
         # 'self' is already available via closure
         self.check_fn = lambda s, t: check_fn(s, [StepWrapper(step) for step in t])
@@ -160,6 +163,10 @@ class Property:
         return converged
 
     def setup_eval(self, log_dir: Path | str | None, save_full_results: bool = False) -> None:
+        if self.fallbacked is not None:
+            self.st_method = self.fallbacked
+            self.fallbacked = None
+
         self.st_method.count = 0
         self.st_method.mean = 0.0
         self.st_method._m2 = 0.0
@@ -191,6 +198,7 @@ class Property:
         settings = self.__dict__.copy()
         for key in [
             *exclude,
+            "fallbacked",
             "st_method",
             "check_fn",
             "results_lock",
@@ -265,21 +273,14 @@ class Property:
         property_id = hashlib.sha256(current_time.encode()).hexdigest()[:6]
         self.property_id = property_id
 
-    def fallback_st_method(self) -> str:
+    def fallback_st_method(self) -> st.StatisticalMethod | None:
         assert self.epsilon is not None, "Can only fallback in case of sequential setting"
-        prev_st_method = self.st_method.__class__.__name__
-
-        prev_mean = self.mean
-        prev_variance = self.variance
-        prev_std = self.std
-        prev_count = self.num_episodes
-        prev_m2 = self.st_method._m2
 
         # We cannot replace by sound method if it is not binomial since we do not store all results
         # that are needed for the sound DKW method.
         fb_sound = self.st_method.is_sound() and self.binomial
 
-        self.st_method = select_statistical_method(
+        new_st_method = select_statistical_method(
             epsilon=None,  # Fallback means fixed run setting -> no epsilon
             kappa=self.kappa,
             bounds=self.bounds,
@@ -287,14 +288,24 @@ class Property:
             binomial=self.binomial,
             sound=fb_sound,
         )
+        if new_st_method.__class__ == self.st_method.__class__:
+            return None
 
+        prev_mean = self.mean
+        prev_variance = self.variance
+        prev_std = self.std
+        prev_count = self.num_episodes
+        prev_m2 = self.st_method._m2
+
+        self.fallbacked = self.st_method
+        self.st_method = new_st_method
         self.st_method.count = prev_count
         self.st_method.mean = prev_mean
         self.st_method.variance = prev_variance
         self.st_method.stddev = prev_std
         self.st_method._m2 = prev_m2
 
-        return prev_st_method
+        return self.fallbacked
 
     # Refer to statistical method, to avoid errors due to duplicated variables
     @property

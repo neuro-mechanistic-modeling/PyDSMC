@@ -513,7 +513,7 @@ class DKWMethod(StatisticalMethod):
             binomial,
             min_samples,
         )
-        self.samples = []
+        self.samples: list[float] = []
 
         # Fixed number of runs setting only; requires bounded support
         if epsilon is not None:

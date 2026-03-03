@@ -37,7 +37,7 @@ def setup_module():
     SEED = 42
     TRUNCATE_LIMIT = 100
 
-    # Intialize evaluation environment
+    # Initialize evaluation environment
     envs = create_eval_envs(
         num_threads=NUM_THREADS,
         num_envs_per_thread=NUM_PAR_ENVS,
@@ -474,7 +474,7 @@ def test_fallback_selection(setup_module, time_limit, episode_limit):
     TRUNCATE_LIMIT = 100
     FIXED_LOG_DIR = setup_module["FIXED_LOG_DIR"]
 
-    # Intialize evaluation environment
+    # Initialize evaluation environment
     envs = create_eval_envs(
         num_threads=NUM_THREADS,
         num_envs_per_thread=NUM_PAR_ENVS,
@@ -521,6 +521,7 @@ def test_fallback_selection(setup_module, time_limit, episode_limit):
         with stored_settings_path.open() as f:
             settings = json.load(f)
 
+        # TODO: Expected failure. fix later
         assert settings["st_method"] == p.st_method.__class__.__name__
         assert "original_st_method" in settings
 
