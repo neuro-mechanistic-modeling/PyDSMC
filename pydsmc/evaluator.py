@@ -149,6 +149,7 @@ class Evaluator:
         save_full_trajectory: bool = False,
         num_threads: int | None = None,
         extra_log_info: Any = None,
+        reset_hidden_states: tuple[np.ndarray, ...] | None = None,
         **predict_kwargs: Any,
     ) -> list[Property]:
         if num_initial_episodes < 1 or num_episodes_per_policy_run < 1:
@@ -258,6 +259,7 @@ class Evaluator:
                     ),
                     num_threads=num_threads,
                     save_full_trajectory=save_full_trajectory,
+                    reset_hidden_states=reset_hidden_states,
                     **predict_kwargs,
                 )
 
@@ -355,10 +357,13 @@ class Evaluator:
         num_episodes: int,
         *,
         save_full_trajectory: bool,
+        reset_hidden_states: tuple[np.ndarray, ...] | None = None,
         **predict_kwargs,
     ) -> None:
         env = self.__get_thread_env()
 
+        if reset_hidden_states is not None:
+            hidden_states = tuple(np.array(h, copy=True) for h in reset_hidden_states)
         # Distribute episodes evenly to available parallel environments
         num_episodes_per_venv = np.array(
             [(num_episodes + i) // self.num_envs for i in range(self.num_envs)],
@@ -413,9 +418,17 @@ class Evaluator:
                     terminateds = dones
                     truncateds = [False for _ in range(self.num_envs)]
 
-            if hidden_states:  # NOTE: We only support zero initialization for now. Might reconsider
+            if hidden_states:
+                # On episode reset, reset the recurrent state: to zero by default,
+                # or to a provided `reset_hidden_states` (e.g. an archived hidden
+                # state being evaluated from) so restoration is exact.
                 for i, done in enumerate(dones):
-                    if done:
+                    if not done:
+                        continue
+                    if reset_hidden_states is not None:
+                        for k in range(len(hidden_states)):
+                            hidden_states[k][:, i, :] = reset_hidden_states[k][:, i, :]
+                    else:
                         hidden_states[0][:, i, :] = 0
                         hidden_states[1][:, i, :] = 0
 
@@ -491,6 +504,7 @@ class Evaluator:
         num_threads: int = 1,
         *,
         save_full_trajectory: bool = False,
+        reset_hidden_states: tuple[np.ndarray, ...] | None = None,
         **predict_kwargs,
     ) -> None:
         # Single-threaded: run synchronously in the current thread (no worker thread spawned).
@@ -500,6 +514,7 @@ class Evaluator:
                 hidden_states=hidden_states,
                 num_episodes=num_episodes,
                 save_full_trajectory=save_full_trajectory,
+                reset_hidden_states=reset_hidden_states,
                 **predict_kwargs,
             )
             return
@@ -517,6 +532,7 @@ class Evaluator:
                 hidden_states=hidden_states,
                 num_episodes=int(thread_episodes),
                 save_full_trajectory=save_full_trajectory,
+                reset_hidden_states=reset_hidden_states,
                 **predict_kwargs,
             )
             for thread_episodes in num_episodes_per_thread
