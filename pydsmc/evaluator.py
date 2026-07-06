@@ -105,29 +105,33 @@ class Evaluator:
         for prop in properties:
             self.register_property(prop)
 
-    def __check_fallback(self, stop_on_convergence) -> None:
-        if stop_on_convergence:
-            for p in self.properties:
-                if not p.converged():
-                    prev_st_method = p.fallback_st_method()
-                    if prev_st_method is None:
-                        continue
+    def __check_fallback(self) -> None:
+        # Only properties with an epsilon run in the sequential setting and can
+        # thus fall back. Fixed-run (no-epsilon) properties are skipped: they are
+        # never part of the stopping criterion and their interval is already valid.
+        for p in self.properties:
+            if p.epsilon is None or p.converged():
+                continue
 
-                    additional_entries = {
-                        "original_st_method": prev_st_method.__class__.__name__,
-                        "st_method": p.st_method.__class__.__name__,
-                    }
-                    p.save_settings(
-                        self.log_dir,
-                        additional_entries=additional_entries,
-                    )
-                    self.logger.warning(
-                        "Property %s did not converge within the resource limit. "
-                        "Falling back to %s from %s ",
-                        p.name,
-                        p.st_method.__class__.__name__,
-                        prev_st_method.__class__.__name__,
-                    )
+            prev_st_method = p.fallback_st_method()
+            if prev_st_method is None:
+                continue
+
+            additional_entries = {
+                "original_st_method": prev_st_method.__class__.__name__,
+                "st_method": p.st_method.__class__.__name__,
+            }
+            p.save_settings(
+                self.log_dir,
+                additional_entries=additional_entries,
+            )
+            self.logger.warning(
+                "Property %s did not converge within the resource limit. "
+                "Falling back to %s from %s ",
+                p.name,
+                p.st_method.__class__.__name__,
+                prev_st_method.__class__.__name__,
+            )
 
     def eval(
         self,
@@ -152,16 +156,15 @@ class Evaluator:
             num_threads = len(self.envs)
         if num_threads < 1:
             raise ValueError("Number of threads must be at least 1")
-        if (
-            episode_limit is None
-            and time_limit is None
-            and not (
-                stop_on_convergence and all(prop.epsilon is not None for prop in self.properties)
-            )
-        ):
+        if len(self.properties) == 0:
+            raise ValueError("No properties registered. Use `register_property`.")
+
+        has_resource_limit = episode_limit is not None or time_limit is not None
+        epsilon_props = [prop for prop in self.properties if prop.epsilon is not None]
+        if not has_resource_limit and not (stop_on_convergence and len(epsilon_props) > 0):
             raise ValueError(
-                "At least one stopping criterion must be set: episode_limit, time_limit, or stop_on_convergence. "
-                "If only stop_on_convergence is set, all properties must have an epsilon value set.",
+                "At least one stopping criterion must be set: episode_limit, time_limit, or "
+                "stop_on_convergence with at least one property having an epsilon value set.",
             )
 
         if save_full_trajectory:
@@ -186,6 +189,14 @@ class Evaluator:
             num_threads=num_threads,
             extra_log_info=extra_log_info,
         )
+
+        # Fixed-runs (no-epsilon) properties run in their fixed-run setting and are merely reported.
+        # if resource limit is set, len(epsilon_props) might be 0
+        if stop_on_convergence and len(epsilon_props) == 0:
+            self.logger.warning(
+                "stop_on_convergence is set to True, but no epsilon property is registered.",
+            )
+            stop_on_convergence = False
 
         if time_limit is not None:
             if time_limit <= 0:
@@ -247,18 +258,18 @@ class Evaluator:
                 )
 
                 self.time_passed = time.perf_counter() - start_time
-                if stop_on_convergence and all(prop.converged() for prop in self.properties):
-                    self.logger.info("All properties converged!")
+                if stop_on_convergence and all(prop.converged() for prop in epsilon_props):
+                    self.logger.info("All epsilon properties converged!")
                     break
 
                 if (time_limit is not None) and (self.time_passed >= time_limit_seconds):
                     self.logger.info("Time limit reached!")
-                    self.__check_fallback(stop_on_convergence)
+                    self.__check_fallback()
                     break
 
                 if (episode_limit is not None) and (self.total_episodes >= episode_limit):
                     self.logger.info("Episode limit reached!")
-                    self.__check_fallback(stop_on_convergence)
+                    self.__check_fallback()
                     break
 
                 if save_every_n_episodes and self.total_episodes >= self.next_log_time:
@@ -538,11 +549,6 @@ class Evaluator:
 
         if not callable(predict_fn):
             raise TypeError("No callable predict function or agent given.")
-
-        if len(self.properties) == 0:
-            raise ValueError(
-                "No properties registered. Use `register_property` to register properties to evaluate.",
-            )
 
         self.log_dir = (
             (

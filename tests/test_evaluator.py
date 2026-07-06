@@ -146,6 +146,126 @@ def test_stable_baselines_vecenv(setup_module):
     )
 
 
+def test_convergence_only_mixed_properties(setup_module):
+    # Mode 2: no resource limit, only *one* property has an epsilon.
+    # The evaluation must stop once the epsilon property converges
+    agent = setup_module["agent"]
+    evaluator = Evaluator(env=setup_module["envs"], log_dir=setup_module["PROP_LOG_DIR"])
+
+    epsilon_prop = prop.create_custom_property(
+        name="goal_binomial_converge",
+        check_fn=lambda self, t: float(
+            np.sum(np.fromiter((s[2] for s in t), dtype=np.float32)) >= self.goal_reward - 1e-8,
+        ),
+        epsilon=0.2,
+        kappa=0.25,
+        relative_error=False,
+        bounds=(0, 1),
+        binomial=True,
+        sound=True,
+        goal_reward=100,
+    )
+    # Fixed-run property: no epsilon -> reported only.
+    report_prop = prop.create_custom_property(
+        name="ep_len_report",
+        check_fn=lambda self, t: float(len(t)),
+        epsilon=None,
+        bounds=(0.0, np.inf),
+    )
+    evaluator.register_properties([epsilon_prop, report_prop])
+
+    evaluator.eval(
+        agent=agent,
+        episode_limit=None,
+        time_limit=None,
+        stop_on_convergence=True,
+        num_initial_episodes=100,
+        num_episodes_per_policy_run=50,
+        save_full_results=False,
+        num_threads=1,
+        deterministic=True,
+    )
+
+    assert epsilon_prop.converged()
+    assert epsilon_prop.num_episodes > 0
+    assert report_prop.num_episodes == epsilon_prop.num_episodes
+    assert report_prop.fallbacked is None
+
+
+def test_convergence_only_no_epsilon_raises(setup_module):
+    # No resource limit and no property with an epsilon -> no valid criterion.
+    agent = setup_module["agent"]
+    evaluator = Evaluator(env=setup_module["envs"], log_dir=setup_module["PROP_LOG_DIR"])
+
+    fixed_a = prop.create_custom_property(
+        name="ep_len_fixed_a",
+        check_fn=lambda self, t: float(len(t)),
+        epsilon=None,
+        bounds=(0.0, np.inf),
+    )
+    fixed_b = prop.create_custom_property(
+        name="terminated_fixed_b",
+        check_fn=lambda self, t: float(t[-1][3]),
+        epsilon=None,
+        bounds=(0, 1),
+        binomial=True,
+    )
+    evaluator.register_properties([fixed_a, fixed_b])
+
+    with pytest.raises(ValueError, match="At least one stopping criterion must be set"):
+        evaluator.eval(
+            agent=agent,
+            episode_limit=None,
+            time_limit=None,
+            stop_on_convergence=True,
+            num_initial_episodes=100,
+            num_episodes_per_policy_run=50,
+            save_full_results=False,
+            num_threads=1,
+            deterministic=True,
+        )
+
+
+def test_resource_limit_fallback_only_epsilon_property(setup_module):
+    # Mode 3: resource limit + mixed properties. The epsilon property cannot
+    # converge within the tight limit so it must fall back.
+    agent = setup_module["agent"]
+    evaluator = Evaluator(env=setup_module["envs"], log_dir=setup_module["PROP_LOG_DIR"])
+
+    epsilon_prop = prop.create_custom_property(
+        name="terminated_bounded_sound_seq",
+        check_fn=lambda self, t: float(t[-1][3]),
+        epsilon=0.01,
+        kappa=0.05,
+        relative_error=False,
+        bounds=(0, 1),
+        binomial=False,
+        sound=True,
+    )
+    report_prop = prop.create_custom_property(
+        name="ep_len_report_mode3",
+        check_fn=lambda self, t: float(len(t)),
+        epsilon=None,
+        bounds=(0.0, np.inf),
+    )
+    evaluator.register_properties([epsilon_prop, report_prop])
+
+    evaluator.eval(
+        agent=agent,
+        episode_limit=100,
+        time_limit=None,
+        stop_on_convergence=True,
+        num_initial_episodes=100,
+        num_episodes_per_policy_run=50,
+        save_full_results=False,
+        num_threads=1,
+        deterministic=True,
+    )
+
+    assert epsilon_prop.fallbacked is not None
+    assert report_prop.fallbacked is None
+
+
 def test_single_env(setup_module):
     envs = create_eval_envs(
         num_threads=1,
