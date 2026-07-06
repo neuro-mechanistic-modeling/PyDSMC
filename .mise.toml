@@ -37,6 +37,7 @@ echo "Project Version: $(python -c "import pydsmc; print(pydsmc.__version__)")"
 
 [tools]
 python = "3.11"
+uv = "latest"
 
 [deps]
 [deps.uv]

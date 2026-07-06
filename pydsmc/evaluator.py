@@ -77,7 +77,7 @@ class Evaluator:
         # Support _some_ backwards compatibility at least
         if hasattr(self.envs[0], "n_envs"):
             for e in self.envs:
-                e.num_envs = e.n_env
+                e.num_envs = e.n_envs
 
         if not hasattr(self.envs[0], "num_envs"):
             raise ValueError(
@@ -494,26 +494,20 @@ class Evaluator:
             [(num_episodes + i) // num_threads for i in range(num_threads)],
             dtype="int",
         )
-        num_episodes_before = [0, *np.cumsum(num_episodes_per_thread).tolist()[:-1]]
 
-        # Temporarily store the results in numpy arrays of fixed size
-        futures = {
+        futures = [
             executor.submit(
                 self.__run_episodes,
                 predict_fn=predict_fn,
                 hidden_states=hidden_states,
-                num_episodes=num_episodes,
+                num_episodes=int(thread_episodes),
                 save_full_trajectory=save_full_trajectory,
                 **predict_kwargs,
-            ): (num_before, num_episodes)
-            for num_before, num_episodes in zip(
-                num_episodes_before,
-                num_episodes_per_thread,
-                strict=True,
             )
-        }
+            for thread_episodes in num_episodes_per_thread
+        ]
         for future in as_completed(futures):
-            _result = future.result()  # Wait for completion
+            future.result()  # Wait for completion and propagate any worker exception
 
     def __save_eval_params(self, eval_settings: dict) -> None:
         if self.log_dir is None:

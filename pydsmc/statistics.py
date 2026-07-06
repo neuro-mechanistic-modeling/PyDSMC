@@ -81,6 +81,18 @@ class StatisticalMethod(ABC):
         self.variance = self._m2 / self.count
         self.stddev = np.sqrt(self.variance)
 
+    def reset(self) -> None:
+        """Reset all accumulated sample statistics so the method can be reused for a new evaluation.
+
+        Subclasses that keep additional per-sample state (e.g. stored samples or running
+        bounds) must override this and reset that state as well.
+        """
+        self.count = 0
+        self.mean = 0.0
+        self._m2 = 0.0
+        self.variance = 0.0
+        self.stddev = 0.0
+
     @abstractmethod
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
         return False, None
@@ -529,6 +541,10 @@ class DKWMethod(StatisticalMethod):
         # Keep sorted list of samples
         bisect.insort(self.samples, x)
 
+    def reset(self) -> None:
+        super().reset()
+        self.samples = []
+
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
         # Check minimum number of samples
         if self.count < self.min_samples:
@@ -627,6 +643,11 @@ class EBStopMethod(StatisticalMethod):
         )
         self.lb = max(self.lb, abs(self.mean) - c_t)
         self.ub = min(self.ub, abs(self.mean) + c_t)
+
+    def reset(self) -> None:
+        super().reset()
+        self.lb = 0.0
+        self.ub = np.inf
 
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
         # Check minimum number of samples

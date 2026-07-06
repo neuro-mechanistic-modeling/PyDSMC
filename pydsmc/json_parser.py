@@ -21,13 +21,10 @@ def __read_run_results(
     only_latest: bool = True,
 ) -> list[dict]:
     settings_path = Path(log_dir) / "settings.json"
-    with settings_path.open("r") as f:
-        eval_settings = json.load(f)
-
     with settings_path.open() as f_setting:
         set_data = json.load(f_setting)
 
-    prop_ids = eval_settings["property_ids"]
+    prop_ids = set_data["property_ids"]
 
     last_results = []
     for entry in Path(log_dir).iterdir():
@@ -50,19 +47,23 @@ def __read_run_results(
                     last_results.append(res_data | set_data | pset_data)
 
             elif first_converged_row:
-                conv = False
+                last_row = None
+                appended = False
                 for line in f_results:
-                    res_data = json.loads(line)
-                    if res_data["intv_converged"]:
-                        last_results.append(res_data | set_data | pset_data)
-                        conv = True
+                    last_row = json.loads(line)
+                    if last_row["intv_converged"]:
+                        last_results.append(last_row | set_data | pset_data)
+                        appended = True
                         break
-                if not conv:
-                    last_results.append(res_data | set_data | pset_data)
+                # No converged row found: fall back to the last available row (if any)
+                if not appended and last_row is not None:
+                    last_results.append(last_row | set_data | pset_data)
 
             else:
-                conv = -1
                 lines = f_results.readlines()
+                if not lines:
+                    continue
+                conv = -1
                 for line in lines:
                     res_data = json.loads(line)
                     if res_data["intv_converged"]:

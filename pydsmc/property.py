@@ -166,11 +166,9 @@ class Property:
             self.st_method = self.fallbacked
             self.fallbacked = None
 
-        self.st_method.count = 0
-        self.st_method.mean = 0.0
-        self.st_method._m2 = 0.0
-        self.st_method.variance = 0.0
-        self.st_method.stddev = 0.0
+        # Reset all accumulated statistics (including method-specific state such as
+        # DKW's stored samples or EBStop's running bounds) so the method can be reused.
+        self.st_method.reset()
 
         # Setup internals
         self.save_full_results = save_full_results
