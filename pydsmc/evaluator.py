@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from concurrent.futures import Executor, ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -148,7 +149,7 @@ class Evaluator:
         save_full_trajectory: bool = False,
         num_threads: int | None = None,
         extra_log_info: Any = None,
-        **predict_kwargs,
+        **predict_kwargs: Any,
     ) -> list[Property]:
         if num_initial_episodes < 1 or num_episodes_per_policy_run < 1:
             raise ValueError("Number of initial episodes, and per policy run, must be at least 1")
@@ -217,7 +218,10 @@ class Evaluator:
         # (1) VecEnvs are not picklable which could be circumvented
         # (2) The predict_fn is not picklable, which _is not_ circumventable
         # Therefore, still with ThreadPoolExecutor, and suggest the user to use AsyncVectorEnv or SubprocVecEnv
-        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        executor_cm = (
+            ThreadPoolExecutor(max_workers=num_threads) if num_threads > 1 else nullcontext()
+        )
+        with executor_cm as executor:
             start_time = time.perf_counter()
 
             eval_string = "Starting evaluation"
@@ -482,13 +486,24 @@ class Evaluator:
         self,
         predict_fn: Callable,
         hidden_states: tuple[np.ndarray, ...] | None,
-        executor: Executor,
+        executor: Executor | None,
         num_episodes: int = 50,
         num_threads: int = 1,
         *,
         save_full_trajectory: bool = False,
         **predict_kwargs,
     ) -> None:
+        # Single-threaded: run synchronously in the current thread (no worker thread spawned).
+        if num_threads == 1 or executor is None:
+            self.__run_episodes(
+                predict_fn=predict_fn,
+                hidden_states=hidden_states,
+                num_episodes=num_episodes,
+                save_full_trajectory=save_full_trajectory,
+                **predict_kwargs,
+            )
+            return
+
         # Distribute episodes evenly to available threads
         num_episodes_per_thread = np.array(
             [(num_episodes + i) // num_threads for i in range(num_threads)],

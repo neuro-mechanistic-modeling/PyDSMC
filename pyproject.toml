@@ -14,7 +14,7 @@ dependencies = [
   "scipy (>=1.13.1,<2.0.0)",
   "gymnasium (>=0.28.1,<2.0.0)",
   "packaging (>=20.0)",
-  "pandas (>=2.0.0,<3.0.0)",
+  "pandas (>=2.0.0,<4.0.0)",
 ]
 
 authors = [
@@ -46,9 +46,22 @@ examples = [
   "gymnasium-robotics (>=1.4.0,<2.0.0)",
   "sb3-contrib (>=2.8.0,<3.0.0)",
 ]
-all = ["pydsmc[dev,examples]"]
+docs = [
+  "mkdocs-material (>=9.5.0,<10.0.0)",
+  "mkdocstrings[python] (>=0.27.0,<1.0.0)",
+  "mkdocs-marimo (>=0.2.0,<1.0.0)",
+  "ruff",  # used by mkdocstrings to pretty-format rendered signatures (matches project tooling)
+]
+all = ["pydsmc[dev,examples,docs]"]
 
 [project.urls]
 Repository = "https://github.com/neuro-mechanistic-modeling/pydsmc"
 Issues = "https://github.com/neuro-mechanistic-modeling/pydsmc/issues"
 Paper = "https://doi.org/10.1007/978-3-032-05792-1_8"
+
+[tool.ruff]
+respect-gitignore = true
+line-length = 100
+
+[tool.ruff.format]
+quote-style = "double"

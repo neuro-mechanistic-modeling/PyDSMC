@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import gymnasium as gym
 import numpy as np
@@ -27,8 +27,8 @@ def create_eval_envs(
     env_seed: int,
     gym_id: str,
     wrappers: list[gym.Wrapper] | None = None,
-    vecenv_cls=gym.vector.AsyncVectorEnv,  # Tested: gym.VectorEnv, sb3.VecEnv. gym VecEnvs recommended
-    **gym_kwargs,
+    vecenv_cls: type = gym.vector.AsyncVectorEnv,  # Tested: gym.VectorEnv, sb3.VecEnv. gym VecEnvs recommended
+    **gym_kwargs: Any,
 ) -> list[gym.Env]:
     if wrappers is None:
         wrappers = []

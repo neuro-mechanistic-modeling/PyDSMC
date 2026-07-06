@@ -415,7 +415,7 @@ def create_predefined_property(
     *,
     relative_error: bool = False,
     sound: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> Property:
     if name is None:
         name = property_id
@@ -458,7 +458,7 @@ def create_custom_property(
     relative_error: bool = False,
     binomial: bool = False,
     sound: bool = False,
-    **kwargs,
+    **kwargs: Any,
 ) -> Property:
     # determine which statistical method should be used to compute the confidence interval
     if st_method is None:

@@ -8,13 +8,12 @@ repos:
         entry: "Commit rejected: jupyter, pdf and image files are not allowed."
         language: "fail"
         types_or: [ "jupyter", "image", "pdf", "zip" ]
-  ### I'd have to put all my prefs into the repo if I wanted to include ruff
-  # - repo: "https://github.com/astral-sh/ruff-pre-commit"
-  #   rev: "v0.1.14"
-  #   hooks:
-  #     - id: "ruff"
-  #       args: ["--fix"]
-  #     - id: "ruff-format"
+  # Ruff auto-formatting; settings live in pyproject.toml ([tool.ruff] / [tool.ruff.format]).
+  # Formatting only for now; add the "ruff" (lint --fix) hook once a lint rule set is agreed on.
+  - repo: "https://github.com/astral-sh/ruff-pre-commit"
+    rev: "v0.15.20"
+    hooks:
+      - id: "ruff-format"
   ### Tests take time. Maybe do not put this here, but as a CI
   # - repo: "local"
   #   hooks:
