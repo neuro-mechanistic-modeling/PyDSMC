@@ -1,0 +1,8 @@
+/* Shrink the font of the interactive marimo code editor (its default ~17.6px is a bit large).
+   `font-size` is inherited, and the CodeMirror editor lives in the shadow DOM of the
+   <marimo-code-editor> host, so setting it on the host cascades into the editor without
+   affecting the rendered cell output (the result table).
+   Material sets the root font to 20px, so 0.7rem == 14px. */
+marimo-code-editor {
+  font-size: 0.6rem;
+}

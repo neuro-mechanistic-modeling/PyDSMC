@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
 # TODO: ONLY ADD PROPERTIES WE ACTUALLY WANT TO KEEP
+# NOTE: when changing these, keep the table in `create_predefined_property`'s docstring in sync.
 __PRE_DEFINED_PROPERTIES = {
     # Records the accumulated discounted reward
     "return": {
@@ -57,6 +58,15 @@ __PRE_DEFINED_PROPERTIES = {
 
 
 def get_predefined_properties() -> list[str]:
+    """List the IDs of all available predefined properties.
+
+    The returned IDs (e.g. `"return"`, `"episode_length"`,  `"goal_reaching_probability"`,
+    `"truncation"`, `"unsuccesful_termination"`) can be passed as `property_id` to
+    [`create_predefined_property`][pydsmc.create_predefined_property].
+
+    Returns:
+        The list of predefined property IDs.
+    """
     return list(__PRE_DEFINED_PROPERTIES.keys())
 
 
@@ -96,6 +106,31 @@ class StepWrapper:
 
 # base class for evaluation properties
 class Property:
+    """A trajectory-based quantity to estimate, together with its statistical method.
+
+    A property maps each trajectory to a single `float` sample via its `check_fn`; PyDSMC then
+    estimates the mean of that value with a confidence interval using the associated statistical
+    method. Prefer the factory functions
+    [`create_predefined_property`][pydsmc.create_predefined_property] and
+    [`create_custom_property`][pydsmc.create_custom_property] over constructing this class directly.
+
+    Parameters such as `epsilon`, `kappa`, `bounds`, `binomial`, and `relative_error` are exposed as
+    read-only properties that delegate to the underlying statistical method.
+
+    Attributes:
+        mean: The mean of the property, estimated from the collected samples.
+        variance: The variance of the property, estimated from the collected samples.
+        std: The standard deviation of the property, estimated from the collected samples.
+        num_episodes: The number of episodes (samples) collected for this property.
+        epsilon: The properties requested half-width of the confidence interval.
+        kappa: The properties confidence level.
+        binomial: Whether the property is binomial (a 0/1 indicator, e.g. a probability).
+        bounds: The properties bounds, i.e. the minimum and maximum possible values of the property.
+        relative_error: Whether the property uses relative error for its confidence interval.
+        fallbacked: If the property has been switched to a fallback statistical method, this is the previous method. Otherwise `None`.
+            On setup, the property will reset to its original statistical method if it was previously fallbacked.
+    """
+
     property_dir: Path | None
     save_path: Path | None
     full_results_path: Path | None
@@ -147,6 +182,13 @@ class Property:
             self.__full_results.append(x)
 
     def get_interval(self) -> tuple[bool, tuple[float, float] | None]:
+        """Get the current confidence interval and whether it has converged.
+
+        Returns:
+            A tuple `(converged, interval)` where `converged` is a boolean indicating whether the
+                confidence interval has converged, and `interval` is a tuple `(lower_bound, upper_bound)`
+                representing the current confidence interval, or `None` if no interval can be constructed yet.
+        """
         if (
             self.max_episodes_zero_variance > 0
             and self.st_method.count > self.max_episodes_zero_variance
@@ -225,6 +267,13 @@ class Property:
         return settings
 
     def get_log_line(self) -> dict[str, Any]:
+        """Get a dictionary containing the current state and information of the property.
+
+        This dictionary has the same format as the one saved to results.jsonl.
+
+        Returns:
+            A dictionary containing the current state and information of the property (`name`, `property_id`, `total_episodes`, `mean`, `variance`, `std`, `confidence_interval`, `intv_converged`).
+        """
         results: dict[str, Any] = {}
         results["name"] = self.name
         results["property_id"] = self.property_id
@@ -417,6 +466,42 @@ def create_predefined_property(
     sound: bool = False,
     **kwargs: Any,
 ) -> Property:
+    """Create a ready-made, parameterized property.
+
+    Unless an explicit `st_method` is given, a suitable statistical method is selected automatically
+    from the provided parameters. The available `property_id` values (also returned by
+    [`get_predefined_properties`][pydsmc.get_predefined_properties]) are:
+
+    | `property_id`                 | Measures (per episode)                        | Binomial | Default `bounds` | Property-specific `**kwargs` |
+    | ----------------------------- | --------------------------------------------- | -------- | ---------------- | ---------------------------- |
+    | `"return"`                    | Acc. discounted reward                        | No       | `(-inf, inf)`    | `gamma` (default `0.99`)     |
+    | `"episode_length"`            | #Steps, incl. truncation                      | No       | `(0, inf)`       | —                            |
+    | `"goal_reaching_probability"` | Perc. of runs with return &geq; `goal_reward` | Yes      | `(0, 1)`         | `goal_reward` (default `1`)  |
+    | `"truncation"`                | Perc. of truncated runs                       | Yes      | `(0, 1)`         | —                            |
+    | `"unsuccesful_termination"`   | Perc. terminated with non-positive return     | Yes      | `(0, 1)`         | —                            |
+
+    Any of the defaults above (`bounds`, `gamma`, `goal_reward`, ...) can be overridden via `**kwargs`.
+
+    Args:
+        property_id: ID of the predefined property (e.g. `"return"`, `"episode_length"`).
+        st_method: An explicit statistical method. If `None`, one is selected automatically.
+        epsilon: Half-width of the requested confidence interval. With `relative_error=True` it is
+            relative to the estimate, otherwise absolute. Pass `None` to run a fixed number of
+            episodes without a convergence target.
+        kappa: Error probability; the true mean lies within the CI with prob. `1 - kappa`.
+        min_samples: Minimum number of samples before convergence may be declared.
+        name: Name used when storing results. Defaults to `property_id`.
+        relative_error: Whether `epsilon` is a relative (`True`) or absolute (`False`) error.
+        sound: Whether a sound statistical method (guaranteed coverage) must be used.
+        **kwargs: Property-specific attributes (e.g. `bounds`, `gamma`, `goal_reward`) that override
+            the predefined defaults.
+
+    Returns:
+        The configured [`Property`][pydsmc.Property].
+
+    Raises:
+        ValueError: If `property_id` is not a known predefined property.
+    """
     if name is None:
         name = property_id
 
@@ -460,6 +545,30 @@ def create_custom_property(
     sound: bool = False,
     **kwargs: Any,
 ) -> Property:
+    """Create a custom property from a user-provided checking function.
+
+    The `check_fn` receives the property instance and a trajectory — a list of steps, each a tuple
+    `(observation, action, reward, terminated, truncated, info)` — and returns a `float` sample.
+    Unless an explicit `st_method` is given, a suitable statistical method is selected automatically.
+
+    Args:
+        name: Name used when storing results.
+        check_fn: Callable `check_fn(property, trajectory) -> float` producing one sample per
+            trajectory. `trajectory[-1]` is the final step; `trajectory[-1][2]` is the last reward.
+        st_method: An explicit statistical method. If `None`, one is selected automatically.
+        epsilon: Half-width of the requested confidence interval (relative if `relative_error`,
+            otherwise absolute). Pass `None` for a fixed-run setting without a convergence target.
+        kappa: Error probability; the true mean lies within the CI with prob. `1 - kappa`.
+        bounds: The property's `(min, max)` possible values. Required for sound/bounded methods.
+        min_samples: Minimum number of samples before convergence may be declared.
+        relative_error: Whether `epsilon` is a relative (`True`) or absolute (`False`) error.
+        binomial: Whether the property is binomial (a 0/1 indicator, e.g. a probability).
+        sound: Whether a sound statistical method (guaranteed coverage) must be used.
+        **kwargs: Extra attributes stored on the resulting property.
+
+    Returns:
+        The configured [`Property`][pydsmc.Property].
+    """
     # determine which statistical method should be used to compute the confidence interval
     if st_method is None:
         st_method = select_statistical_method(

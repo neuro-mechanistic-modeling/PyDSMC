@@ -1,0 +1,112 @@
+site_name: PyDSMC
+site_description: >-
+  Statistical Model Checking for Neural Agents Using the Gymnasium Interface.
+site_url: https://neuro-mechanistic-modeling.github.io/PyDSMC/
+site_author: The PyDSMC Authors
+
+repo_url: https://github.com/neuro-mechanistic-modeling/PyDSMC
+repo_name: neuro-mechanistic-modeling/PyDSMC
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; The PyDSMC Authors — MIT License
+
+theme:
+  name: material
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+  - marimo
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            members_order: source
+            filters: ["!^_"]
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/neuro-mechanistic-modeling/PyDSMC
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/pydsmc/
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Usage: usage.md
+  - Examples: examples.md
+  - Try in Browser: try-in-browser.md
+  - Contributing: contributing.md
+  - Citation: citation.md
+  - API Reference:
+      - Overview: reference/index.md
+      - Evaluator: reference/evaluator.md
+      - Properties: reference/property.md
+      - Utilities: reference/utils.md

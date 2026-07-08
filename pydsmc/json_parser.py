@@ -85,6 +85,29 @@ def jsons_to_df(
     save: bool = True,
     only_latest: bool = True,
 ) -> pd.DataFrame:
+    """Aggregate the JSON-Lines logs of an evaluation run into a pandas `DataFrame`.
+
+    Reads the per-property `results.jsonl` files written under `log_dir`, merges them with the run
+    and property settings, and returns the combined results. Optionally also writes the aggregated
+    results to disk.
+
+    Args:
+        log_dir: Directory containing an evaluation run's logs (the run's `settings.json` and the
+            per-property subdirectories).
+        save_path: Where to write the aggregated results. Defaults to `log_dir`. If it is a
+            directory, a `results.jsonl` is written inside it; a `.csv` suffix writes CSV, otherwise
+            JSON.
+        include_timeseries: Include every intermediate result (the full time series) rather than
+            just the final row per property.
+        first_converged_row: Keep the first row where the interval converged (falling back to the
+            last available row if none converged). Ignored if `include_timeseries` is set.
+        save: Whether to write the aggregated results to `save_path`.
+        only_latest: Only read the properties referenced in the run's `settings.json` (the latest
+            run), rather than every property subdirectory present.
+
+    Returns:
+        A `DataFrame` with one row per property (or per intermediate result when `include_timeseries` is set).
+    """
     latest_results = __read_run_results(
         log_dir,
         include_timeseries=include_timeseries,

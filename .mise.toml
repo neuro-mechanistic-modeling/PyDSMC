@@ -9,18 +9,21 @@ PYTHON_VERSION = "3.11"
 [tasks.install]
 description = "Install all optional dependencies"
 run = """
+mise deps
+[ -d .venv ] || uv venv
 uv pip install -e ".[all]"
-pre-commit install
+uv run pre-commit install
 """
 
 [tasks.test]
 description = "Run tests"
+alias = "t"
 run = """
+[ -d .venv ] || uv venv
 uv pip install -e ".[dev]"
-pre-commit install
+uv run pre-commit install
 pytest tests/
 """
-alias = "t"
 
 [tasks.info]
 description = "Print project information"
@@ -33,6 +36,23 @@ echo "------"
 echo "Virtual Environment: $VIRTUAL_ENV"
 echo "Python Version: $(python --version)"
 echo "Project Version: $(python -c "import pydsmc; print(pydsmc.__version__)")"
+"""
+
+[tasks.docs]
+description = "Serve the documentation locally with live reload"
+alias = "d"
+usage = '''
+  flag "--serve -s"  Serve the documentation locally with live reload
+'''
+run = """
+uv pip install -e ".[docs]"
+
+if [[ "${usage_serve:-false}" == "true" ]]; then
+  mkdocs serve
+  exit 0
+fi
+
+mkdocs build --strict
 """
 
 [tools]

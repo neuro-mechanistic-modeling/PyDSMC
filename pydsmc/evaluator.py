@@ -27,19 +27,64 @@ if TYPE_CHECKING:
 
 # Main evaluator class
 class Evaluator:
+    """Evaluates a policy on registered [`Property`][pydsmc.Property] instances.
+
+    The evaluator repeatedly rolls out a policy on one or more (vectorized) environments, feeds each
+    resulting trajectory to every registered property, and updates the property's statistical
+    confidence interval. Evaluation continues until all properties have converged (when
+    `stop_on_convergence=True`) or a resource limit (`episode_limit` / `time_limit`) is reached.
+
+    Typical usage:
+
+    ```python
+    evaluator = Evaluator(env=envs)
+    evaluator.register_property(my_property)
+    results = evaluator.eval(agent=agent, stop_on_convergence=True)
+    ```
+
+    Attributes:
+        envs: The (list of) vectorized environments used for evaluation.
+        time_passed: Wall-clock seconds spent in the most recent evaluation.
+        log_dir: Directory of the current run, or `None` when logging is disabled.
+        properties: List of registered [`Property`][pydsmc.Property] instances.
+    """
+
     envs: list[Any]
     time_passed: float
     log_dir: Path | None
+    properties: list[Property]
 
     def __init__(
         self,
         env: list[gym.vector.VectorEnv] | list[SB3VecEnv] | list[GymEnv] | GymEnv,
-        log_dir: Path | str | os.PathLike[str] | None = "logs",
+        log_dir: Path | str | os.PathLike | None = "logs",
         log_subdir: str = "eval",
         log_level: int = logging.INFO,
         *,
         colorize_logs: bool = False,
     ) -> None:
+        """Create an evaluator over one or more environments.
+
+        The environment(s) may be a single Gymnasium environment, a single vectorized environment,
+        or a list of vectorized environments (one per worker thread). Both Gymnasium
+        (`gym.vector.VectorEnv`) and Stable-Baselines3 (`VecEnv`) vectorized environments are
+        supported. A non-vectorized environment is automatically wrapped in an `AsyncVectorEnv`.
+        Use [`create_eval_envs`][pydsmc.create_eval_envs] to build environments in the expected
+        format.
+
+        Args:
+            env: The evaluation environment(s). A single (vectorized) environment, or a list of
+                vectorized environments — one per thread used during [`eval`][pydsmc.Evaluator.eval].
+            log_dir: Base directory for run logs. Each `eval` call creates a numbered subdirectory
+                under it. Pass `None` to disable all file logging (nothing is written to disk).
+            log_subdir: Prefix for the per-run subdirectory (e.g. `eval_0`, `eval_1`, ...).
+            log_level: Logging verbosity, as a `logging` level (e.g. `logging.INFO`).
+            colorize_logs: Whether to colorize console log output.
+
+        Raises:
+            ValueError: If the environment is not a vectorized Gymnasium or Stable-Baselines3
+                environment, or uses an unsupported autoreset mode (only `NextStep` is supported).
+        """
         self.log_base = Path(log_dir) if log_dir is not None else None
         self.log_dir = None  # Will be set once eval starts
         if self.log_base is not None:
@@ -96,13 +141,24 @@ class Evaluator:
 
     @property
     def num_envs(self) -> int:
+        """Number of parallel environments per (vectorized) environment / thread."""
         return self.envs[0].num_envs
 
     def register_property(self, property_: Property) -> None:
+        """Register a property to be evaluated on the next [`eval`][pydsmc.Evaluator.eval] call.
+
+        Args:
+            property_: The property to evaluate. It is assigned a fresh property ID on registration.
+        """
         property_.set_property_id()
         self.properties.append(property_)
 
     def register_properties(self, properties: Iterable[Property]) -> None:
+        """Register several properties at once.
+
+        Args:
+            properties: An iterable of properties to register.
+        """
         for prop in properties:
             self.register_property(prop)
 
@@ -152,6 +208,45 @@ class Evaluator:
         reset_hidden_states: tuple[np.ndarray, ...] | None = None,
         **predict_kwargs: Any,
     ) -> list[Property]:
+        """Evaluate the policy on all registered properties until convergence or a resource limit.
+
+        Provide the policy either as an `agent` exposing a `predict(obs, ...)` method (e.g. any
+        Stable-Baselines3 model) or directly as a `predict_fn` callable. Extra keyword arguments are
+        forwarded to the policy (e.g. `deterministic=True`).
+
+        At least one stopping criterion must be active: `episode_limit`, `time_limit`, or
+        `stop_on_convergence=True` together with at least one property that has an `epsilon`.
+
+        Args:
+            agent: An object with a `predict` method. Used only when `predict_fn` is `None`.
+            predict_fn: A callable `predict_fn(obs, hidden_states, episode_starts, **kwargs)`
+                returning `(actions, hidden_states)` for a batch of observations. Takes precedence
+                over `agent`.
+            episode_limit: Maximum number of episodes to sample before stopping. `None` for no limit.
+            time_limit: Maximum wall-clock time **in minutes** before stopping. `None` for no limit.
+            num_initial_episodes: Number of episodes sampled in the first policy run.
+            num_episodes_per_policy_run: Number of episodes sampled per subsequent policy run
+                (i.e. between convergence checks).
+            save_every_n_episodes: Persist intermediate results every this many episodes. `None`
+                uses `num_episodes_per_policy_run`.
+            stop_on_convergence: Whether to stop once all properties with an `epsilon` converged.
+            save_full_results: Whether to store every individual sample.
+            save_full_trajectory: Whether to store full trajectories to disk. Slow and disk-heavy;
+                not recommended.
+            num_threads: Number of worker threads. Defaults to the number of environments. Must not
+                exceed the number of environments.
+            extra_log_info: Arbitrary extra metadata stored alongside the run settings.
+            **predict_kwargs: Extra keyword arguments forwarded to `agent.predict` / `predict_fn`.
+
+        Returns:
+            The list of registered [`Property`][pydsmc.Property] instances, each holding its final estimate and confidence interval.
+
+        Raises:
+            ValueError: If arguments are invalid (e.g. no stopping criterion, no registered
+                properties, `num_threads < 1`, or a non-positive `time_limit`).
+            TypeError: If neither a callable `predict_fn` nor an `agent` with a `predict` method is
+                given.
+        """
         if num_initial_episodes < 1 or num_episodes_per_policy_run < 1:
             raise ValueError("Number of initial episodes, and per policy run, must be at least 1")
         if num_threads is None:
@@ -334,9 +429,15 @@ class Evaluator:
         return self.properties
 
     def clear_properties(self) -> None:
+        """Remove all registered properties."""
         self.properties = []
 
     def set_log_dir(self, log_dir: Path | str | os.PathLike | None = "logs") -> None:
+        """Set the base directory for run logs.
+
+        Args:
+            log_dir: New base log directory, or `None` to disable file logging.
+        """
         self.log_base = Path(log_dir) if log_dir is not None else None
         if self.log_base is not None:
             self.log_base.mkdir(exist_ok=True, parents=True)
@@ -363,7 +464,12 @@ class Evaluator:
         env = self.__get_thread_env()
 
         if reset_hidden_states is not None:
+            # Start from (and, below, reset to) the provided recurrent state instead
+            # of zero — used to evaluate a policy from a fixed restored hidden state
+            # (e.g. an archived Go-Explore state). Copy so parallel worker threads
+            # don't share one mutable buffer.
             hidden_states = tuple(np.array(h, copy=True) for h in reset_hidden_states)
+
         # Distribute episodes evenly to available parallel environments
         num_episodes_per_venv = np.array(
             [(num_episodes + i) // self.num_envs for i in range(self.num_envs)],

@@ -30,6 +30,26 @@ def create_eval_envs(
     vecenv_cls: type = gym.vector.AsyncVectorEnv,  # Tested: gym.VectorEnv, sb3.VecEnv. gym VecEnvs recommended
     **gym_kwargs: Any,
 ) -> list[gym.Env]:
+    """Create vectorized evaluation environments in the format expected by [`Evaluator`][pydsmc.Evaluator].
+
+    Builds `num_threads` vectorized environments, each bundling `num_envs_per_thread` copies of
+    `gym_id`. Each individual environment is seeded with a unique, incrementing seed derived from
+    `env_seed`, and wrapped with the given `wrappers`.
+
+    Args:
+        num_threads: Number of vectorized environments to create (one per evaluation thread).
+        num_envs_per_thread: Number of parallel environments within each vectorized environment.
+        env_seed: Base seed. Environment `i` is seeded with `env_seed + i`.
+        gym_id: The Gymnasium environment ID passed to `gym.make`.
+        wrappers: Gymnasium wrappers applied to each environment; first = innermost.
+        vecenv_cls: The vectorized-environment class to use (e.g. `gym.vector.AsyncVectorEnv`,
+            `gym.vector.SyncVectorEnv`, or a Stable-Baselines3 `VecEnv`).
+        **gym_kwargs: Extra keyword arguments forwarded to `gym.make` (and thus to the environment),
+            e.g. `max_episode_steps`.
+
+    Returns:
+        A list of `num_threads` vectorized environments, ready to pass to `Evaluator(env=...)`.
+    """
     if wrappers is None:
         wrappers = []
 

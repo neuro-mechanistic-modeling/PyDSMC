@@ -9,6 +9,7 @@
 ![Downloads](https://img.shields.io/pepy/dt/pydsmc)
 ![Python](https://img.shields.io/pypi/pyversions/pydsmc)
 [![Tests](https://github.com/neuro-mechanistic-modeling/PyDSMC/actions/workflows/tests.yml/badge.svg)](tests)
+[![Docs](https://github.com/neuro-mechanistic-modeling/PyDSMC/actions/workflows/docs.yml/badge.svg)](https://neuro-mechanistic-modeling.github.io/PyDSMC/)
 [![License](https://img.shields.io/github/license/neuro-mechanistic-modeling/PyDSMC)](LICENSE)
 
 <!-- SHORT DESCRIPTION OF THE TOOL -->
@@ -20,6 +21,8 @@ Implementing the Gymnasium interface, PyDSMC is widely applicable and fully agno
 PyDSMC is based on [Deep Statistical Model Checking](https://doi.org/10.1007/978-3-030-50086-3_6) and aims to facilitate greater adoption of statistical model checking by simplifying its usage.
 
 Please consult the [accompanying paper](https://woshicado.eu/publications/2025/pydsmc/PyDSMC.pdf) for more details.
+
+📖 **Full documentation** (with an in-browser demo) is available at **[neuro-mechanistic-modeling.github.io/PyDSMC](https://neuro-mechanistic-modeling.github.io/PyDSMC/)**.
 
 ## Table of Contents
 
@@ -68,8 +71,8 @@ Creating a predefined property is straightforward. For instance, a property anal
 from pydsmc import create_predefined_property
 
 return_property = create_predefined_property(
-    property_id='return',   # Which predefined property to use
-    name='returnGamma0.97', # Property's name, used for storing the evaluation results
+    property_id="return",   # Which predefined property to use
+    name="returnGamma0.97", # Property's name, used for storing the evaluation results
     epsilon=0.025,          # Half-width of the requested confidence interval (CI)
     kappa=0.05,             # Probability that the true mean lies within the CI
     relative_error=True,    # Whether epsilon represents the relative or absolute error
@@ -85,7 +88,7 @@ Creating a custom property is equally simple. The only additional information re
 from pydsmc import create_custom_property
 
 crash_property = create_custom_property(
-    name='crash_prob',      # see above
+    name="crash_prob",      # see above
     epsilon=0.025,          # see above
     kappa=0.05,             # see above
     relative_error=False,   # see above
@@ -93,7 +96,7 @@ crash_property = create_custom_property(
     bounds=(0, 1),          # see above
     sound=False,            # see above
     # The property's checking function, crash identified by last reward -100
-    check_fn=lambda self, t: float(t[-1][2] == -100)
+    check_fn=lambda self, t: float(t[-1].reward == -100)
 )
 ```
 
@@ -106,7 +109,7 @@ In order to construct an `Evaluator`, it is first necessary to create the evalua
 ```python
 from pydsmc import create_eval_envs, Evaluator
 
-NUM_THREADS = 1   # Recommended: 1; Often better to use more parallel environments instead
+NUM_THREADS = 1  # Recommended: 1; Often better to use more parallel environments instead
 NUM_PAR_ENVS = 8  # Number of parallel environments _per thread_
 
 envs = create_eval_envs(
